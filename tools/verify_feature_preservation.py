@@ -21,6 +21,14 @@ ALLOWED_CHANGES = {
     "docs/FEATURE_PRESERVATION_RECOVERY.md",
     "docs/FEATURE_PARITY_AUDIT.md",
     "tools/verify_feature_preservation.py",
+    # Explicitly scoped transport fixes. Existing UI/messaging/tool
+    # dispatch/voice/rendering source must remain byte-for-byte identical.
+    "app/src/main/java/net/kuafuai/andee/BodyCoreService.kt",
+    "app/src/main/java/net/kuafuai/andee/net/BodyWsServer.kt",
+    "app/src/main/java/net/kuafuai/andee/net/BodyWsClient.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/net/NetworkPolicy.kt",
+    "core/src/test/kotlin/net/kuafuai/andee/net/NetworkPolicyTest.kt",
+    "tools/check_network_transport.py",
 }
 
 def git(*args):
@@ -105,6 +113,9 @@ MUST_CONTAIN = {
     ),
     "core/src/main/kotlin/net/kuafuai/andee/net/TurnGuards.kt": (
         "fun check(", 'method.startsWith("device.vault.")',
+    ),
+    "core/src/main/kotlin/net/kuafuai/andee/net/NetworkPolicy.kt": (
+        "fun isSecureHubUrl(", '"wss"',
     ),
 }
 for path, tokens in MUST_CONTAIN.items():
