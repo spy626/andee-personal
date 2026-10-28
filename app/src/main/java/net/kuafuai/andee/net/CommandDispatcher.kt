@@ -316,6 +316,12 @@ class CommandDispatcher(
         silent: Boolean = false,
         untrusted: Boolean = false,
     ): Any? {
+        if (SensitiveConsent.pending && (method.startsWith("screen.") || method in setOf(
+            "device.vault.fill", "device.dial", "device.sms.send",
+            "ui.ask", "ui.alert", "ui.nudge", "ui.show_html"
+        ))) {
+            throw IllegalStateException("An on-device approval is pending; agent controls are temporarily blocked.")
+        }
         // Where the turn came from decides what it may call — see [TurnGuards].
         // Checked before the fold below, so a refused call cannot so much as
         // move the card.
@@ -446,10 +452,16 @@ class CommandDispatcher(
             "device.contacts" -> deviceComms.searchContacts(
                 query = params?.optString("query")?.ifEmpty { null },
             )
-            "device.dial" -> deviceComms.dial(
-                number = requireNotNull(params?.optString("number")?.ifEmpty { null }) { "device.dial requires number" },
-                direct = params?.optBoolean("direct", false) ?: false,
-            )
+            "device.dial" -> {
+                val number = requireNotNull(params?.optString("number")?.ifEmpty { null }) { "device.dial requires number" }
+                val direct = params?.optBoolean("direct", false) ?: false
+                if (direct) {
+                    require(number.length <= 40) { "Phone number too long for a visible confirmation." }
+                    ensureCompact()
+                    SensitiveConsent.requireApproval(appContext, "Place DIRECT call to: $number")
+                }
+                deviceComms.dial(number, direct)
+            }
             "device.call_log" -> deviceComms.callLog()
             "device.sms.read" -> deviceComms.readSms(
                 box = params?.optString("box", "inbox") ?: "inbox",
@@ -512,7 +524,6 @@ class CommandDispatcher(
             }
             "device.vault.fill" -> {
                 ensureCompact()
-                window.pulseTool()
                 val who = requireNotNull(params?.optString("entry")?.ifEmpty { null }) {
                     "device.vault.fill requires entry"
                 }
@@ -531,6 +542,14 @@ class CommandDispatcher(
                         "entry '${e.label}' has no secret '$field'. It has ${e.secrets()}; " +
                         "read the rest with get_vault, or ask the user to add it in 设置 → 保险箱"
                     )
+                require(e.label.length <= 40 && field.length <= 30) {
+                    "Vault entry or field label is too long to display for approval."
+                }
+                SensitiveConsent.requireApproval(
+                    appContext,
+                    "Type saved '$field' from '${e.label}' into the currently focused field. The secret itself stays hidden."
+                )
+                window.pulseTool()
                 // The device is typing the user's own secret for them, so say
                 // so. `pulseTool()` above is the live tell while the card is
                 // folded; the subtitle is the record, readable the moment the
