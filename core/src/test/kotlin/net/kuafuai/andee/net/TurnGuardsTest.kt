@@ -50,15 +50,67 @@ class TurnGuardsTest {
     }
 
     @Test
-    fun `an untrusted turn cannot change scenes but may read and leave them`() {
-        for (m in listOf("scene.save", "scene.enter", "scene.delete")) refused(m, untrusted = true)
-        for (m in listOf("scene.list", "scene.get", "scene.exit")) TurnGuards.check(m, false, true)
+    fun `an untrusted turn cannot change scenes but may inspect them`() {
+        for (m in listOf("scene.save", "scene.enter", "scene.delete", "scene.exit")) refused(m, untrusted = true)
+        for (m in listOf("scene.list", "scene.get")) TurnGuards.check(m, false, true)
     }
 
     @Test
-    fun `an untrusted turn may still drive the screen and set todos`() {
-        TurnGuards.check("screen.tap", silent = false, untrusted = true)
-        TurnGuards.check("note.todo", silent = false, untrusted = true)
+    fun `externally triggered turns may report safe status`() {
+        for (m in listOf(
+            "device.battery", "device.connectivity", "device.facts", "device.steps",
+            "dog.status", "meeting.status", "gear.list", "peer.list",
+            "scene.list", "scene.get", "tts.speak", "ui.alert", "ui.ask", "ui.nudge",
+        )) {
+            TurnGuards.check(m, silent = false, untrusted = true)
+        }
+    }
+
+    @Test
+    fun `externally triggered turns cannot drive or read the screen`() {
+        for (m in listOf(
+            "screen.tap", "screen.tap_id", "screen.swipe", "screen.type",
+            "screen.submit_input", "screen.global", "screen.screenshot",
+            "screen.ui_tree", "screen.wait", "screen.new_feature",
+        )) {
+            assertEquals(true, refused(m, untrusted = true).contains("externally originated turn"))
+        }
+    }
+
+    @Test
+    fun `a hostile notification cannot send messages launch apps or alter the device`() {
+        for (m in listOf(
+            "device.sms.send", "device.dial", "device.open_url", "device.launch",
+            "device.calendar.add", "device.alarm", "device.permissions.request",
+            "device.volume", "device.brightness", "device.scan", "device.look",
+            "device.sms.read", "device.contacts", "device.new_feature",
+            "meeting.start", "meeting.stop", "dog.move", "dog.sequence",
+            "dog.turn", "dog.stop", "dog.calibrate", "ui.show_html",
+        )) {
+            refused(m, untrusted = true)
+        }
+    }
+
+    @Test
+    fun `untrusted instructions cannot persist or delegate work`() {
+        for (m in listOf(
+            "note.remember", "note.forget", "note.todo", "note.recall", "note.todos",
+            "gear.note", "scene.exit", "scene.save", "scene.enter",
+            "scene.delete", "peer.ask", "arbitrary_extension_tool",
+        )) {
+            refused(m, untrusted = true)
+        }
+    }
+
+    @Test
+    fun `trusted user turns retain device actions`() {
+        for (m in listOf(
+            "screen.tap", "device.sms.send", "device.dial", "device.launch",
+            "dog.move", "note.todo", "note.remember", "scene.exit",
+            "peer.ask", "arbitrary_extension_tool",
+        )) {
+            TurnGuards.check(m, silent = false, untrusted = false)
+        }
     }
 
     @Test

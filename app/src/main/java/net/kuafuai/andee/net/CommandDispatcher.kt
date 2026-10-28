@@ -302,9 +302,9 @@ class CommandDispatcher(
      * @param silent the turn is the quiet-hour sweep: the brain is reviewing a
      *   finished conversation by itself. Only the `note.*` notebook methods are
      *   allowed through — see the guard at the top of this function.
-     * @param untrusted the turn was started by text somebody outside this device
-     *   wrote: a notification the triage decided to act on. The device may be
-     *   driven, but `device.vault.*` is refused — see the second guard.
+     * @param untrusted the turn was started by untrusted text (a notification,
+     *   or a deferred todo derived from one). Only explicit passive methods
+     *   are allowed; no screen control or sensitive device actions.
      */
     /** What is installed and what it is for. Built on first use from [appContext]; one per dispatcher. */
     val gearShelf: net.kuafuai.andee.device.AndroidGear by lazy { net.kuafuai.andee.device.AndroidGear(appContext) }

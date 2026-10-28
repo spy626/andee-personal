@@ -141,6 +141,23 @@ yours: see [DISCLAIMER.md](DISCLAIMER.md) and
 If you find an injection that reaches something this file says is protected,
 that is a vulnerability — report it.
 
+**Personal fork, Security Phase 2:** Untrusted notification-initiated turns now
+use a fail-closed tool allowlist in `TurnGuards`: basic status checks,
+spoken/displayed notices, and scene/device status queries only. They cannot
+operate the screen, read screen pixels or account data, use the vault, send
+SMS, place calls, open URLs, install or launch apps, move connected robots,
+create reminders, change scenes or pass work to other devices. A user who
+wants these actions must start a new direct conversation. This intentionally
+reduces notification-driven automation, rather than pretending model
+instructions are a security barrier.
+
+**Not yet protected:** hostile text displayed during a direct user-initiated
+screen task may still manipulate the model; a user-configured remote hub is
+not authenticated at the application layer; a trusted user turn can still
+perform risky actions without a universal OS-enforced confirmation gate.
+None of these claims applies to a separate desktop or third-party agent
+unless its dispatcher calls the same `TurnGuards` policy.
+
 ### 4. The vault is not bound to device unlock
 
 `Vault` (`app/src/main/java/net/kuafuai/andee/config/Vault.kt`) encrypts entries
