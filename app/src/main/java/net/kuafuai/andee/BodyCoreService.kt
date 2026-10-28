@@ -2543,6 +2543,39 @@ class BodyCoreService : Service() {
                 // this unauthenticated control socket on the LAN.
                 bindHost = "127.0.0.1",
                 registry = callExtensions,
+                requestPeerConsent = { done ->
+                    // Only a physical button tap on the phone authorizes the
+                    // new socket. Voice, timeout and app-written frames cannot.
+                    ui.post {
+                        val unlocked = getSystemService(android.app.KeyguardManager::class.java)
+                            ?.isDeviceLocked == false
+                        val visible = ::window.isInitialized && window.isShown() &&
+                            android.provider.Settings.canDrawOverlays(this)
+                        if (!unlocked || !visible ||
+                            net.kuafuai.andee.ui.CardUi.isCardUp() ||
+                            dispatcher.isTaskActive()
+                        ) {
+                            done(false)
+                        } else {
+                            val approve = AppLocale.str(this, R.string.cmd_ask_yes)
+                            val deny = AppLocale.str(this, R.string.cmd_ask_no)
+                            net.kuafuai.andee.ui.CardUi.ask(
+                                "Local client requests FULL phone control. Did you connect it?",
+                                listOf(approve, deny),
+                                timeoutMs = 20_000L,
+                                captureSpeech = false,
+                            ) { result ->
+                                done(net.kuafuai.andee.net.LocalPeerConsent.approved(
+                                    result.how, result.button, approve,
+                                    deviceUnlocked = getSystemService(
+                                        android.app.KeyguardManager::class.java
+                                    )?.isDeviceLocked == false,
+                                    uiVisible = ::window.isInitialized && window.isShown(),
+                                ))
+                            }
+                        }
+                    }
+                },
                 onExtensionEvent = { kind, data -> onExtensionEvent(kind, data) },
                 onCommand = { method, params ->
                     // driving = false: this socket is the debug / viewer path,
