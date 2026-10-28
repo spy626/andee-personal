@@ -1,0 +1,122 @@
+#!/usr/bin/env python3
+"""Fail-closed source preservation audit against original personal Andee baseline.
+
+This proves unmodified source-file identity, NOT that an Android device works.
+When a feature legitimately changes, update the contract with new behavior tests;
+do not silently widen ALLOWED_CHANGES to bypass a regression.
+"""
+import re
+import subprocess
+from pathlib import Path
+
+BASE = "03189e0c643fe2c2799fa96e3afb9b369e95c8ed"
+ROOT = Path(__file__).resolve().parents[1]
+
+# Only tests/docs/build-tool compatibility changed on this audit branch.
+# Changes to source files, permissions, the mascot, or existing tests fail CI.
+ALLOWED_CHANGES = {
+    ".github/workflows/build.yml",
+    "gradle/libs.versions.toml",
+    "gradle/wrapper/gradle-wrapper.properties",
+    "docs/FEATURE_PRESERVATION_RECOVERY.md",
+    "docs/FEATURE_PARITY_AUDIT.md",
+    "tools/verify_feature_preservation.py",
+}
+
+def git(*args):
+    return subprocess.run(["git", *args], cwd=ROOT, check=True,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE).stdout
+
+def blobs(ref):
+    entries = {}
+    for item in git("ls-tree", "-rz", "--full-tree", ref).split(b"\0"):
+        if not item:
+            continue
+        head, path = item.split(b"\t", 1)
+        mode, kind, sha = head.split(b" ")
+        if kind == b"blob":
+            entries[path.decode("utf-8")] = sha.decode("ascii")
+    return entries
+
+assert subprocess.run(["git", "merge-base", "--is-ancestor", BASE, "HEAD"],
+                      cwd=ROOT).returncode == 0, "original baseline is not an ancestor"
+base, head = blobs(BASE), blobs("HEAD")
+missing = sorted(set(base) - set(head))
+modified = sorted(path for path in base.keys() & head.keys()
+                  if base[path] != head[path] and path not in ALLOWED_CHANGES)
+unexpected_new = sorted(set(head) - set(base) - ALLOWED_CHANGES)
+assert not missing, f"ORIGINAL FEATURES / FILES REMOVED: {missing}"
+assert not modified, f"ORIGINAL SOURCE FILES MODIFIED WITHOUT APPROVAL: {modified}"
+assert not unexpected_new, f"UNREVIEWED ADDITIONS: {unexpected_new}"
+
+# Confirm original capability entry points still exist, not merely some files.
+MUST_CONTAIN = {
+    "app/src/main/AndroidManifest.xml": (
+        "android.permission.SYSTEM_ALERT_WINDOW", "android.permission.RECORD_AUDIO",
+        "android.permission.SEND_SMS", "android.permission.READ_CONTACTS",
+        "android.permission.BIND_NOTIFICATION_LISTENER_SERVICE",
+        ".BodyCoreService", ".ScreenBodyService",
+    ),
+    "app/src/main/java/net/kuafuai/andee/BodyCoreService.kt": (
+        "fun notificationLookRequested(", "fun handleNotification(",
+        "brain?.notified(", "fun onBrainFinal(",
+        "CardUi.tryAnswerByVoice", "fun notificationLookQuery(",
+    ),
+    "app/src/main/java/net/kuafuai/andee/device/NotificationRelayService.kt": (
+        "fun onNotificationPosted(", "offerForTriage(", "com.whatsapp",
+        "fun showSignboardFor(", "notificationLookRequested(",
+    ),
+    "core/src/main/kotlin/net/kuafuai/andee/brain/NotificationTriage.kt": (
+        "enum class Action", "fun decide(", "ACT,", "TELL,", "IGNORE,",
+    ),
+    "core/src/main/kotlin/net/kuafuai/andee/brain/LocalBrain.kt": (
+        "fun notified(", "fun submit(", "fun runTool(", "TurnKind.NOTIFY",
+    ),
+    "app/src/main/java/net/kuafuai/andee/net/CommandDispatcher.kt": (
+        '"device.sms.send"', '"device.dial"', '"device.vault.fill"',
+        '"screen.tap"', '"screen.type"', '"screen.submit_input"', '"ui.ask"',
+    ),
+    "app/src/main/java/net/kuafuai/andee/device/DeviceCommsController.kt": (
+        "fun sendSms(", "sendTextMessage(", "fun dial(", "ACTION_DIAL", "ACTION_CALL",
+    ),
+    "app/src/main/java/net/kuafuai/andee/ui/CardUi.kt": (
+        "fun ask(", "fun bubble(", "fun tryAnswerByVoice(", "wireButtons(",
+    ),
+    "app/src/main/java/net/kuafuai/andee/ui/FloatingWindowUi.kt": (
+        "fun showSignboard(", "fun setState(", "TYPE_APPLICATION_OVERLAY",
+    ),
+    "app/src/main/java/net/kuafuai/andee/ui/ball/EmotionBallTextureView.kt": (
+        "setMood(", "setEmotion(", "setListening(", "setWorking(", "postDelayed",
+    ),
+    "core/src/main/kotlin/net/kuafuai/andee/ui/ball/Mood.kt": (
+        "enum class Mood",
+    ),
+    "core/src/main/kotlin/net/kuafuai/andee/ui/ball/EmotionBallRenderer.kt": (
+        "class EmotionBallRenderer",
+    ),
+    "app/src/main/java/net/kuafuai/andee/screen/ScreenController.kt": (
+        "fun typeText(", "fun tapAim(", "fun dumpUiTree(",
+    ),
+    "app/src/main/java/net/kuafuai/andee/config/VoiceConfig.kt": (
+        "fun hubConfig(", "fun notifyScope(", "fun brainMode(",
+    ),
+    "core/src/main/kotlin/net/kuafuai/andee/peer/PeerTasks.kt": (
+        "fun onMessage(", "fun take(", "interface Brain",
+    ),
+    "core/src/main/kotlin/net/kuafuai/andee/net/TurnGuards.kt": (
+        "fun check(", 'method.startsWith("device.vault.")',
+    ),
+}
+for path, tokens in MUST_CONTAIN.items():
+    data = (ROOT / path).read_text(encoding="utf-8")
+    absent = [tok for tok in tokens if tok not in data]
+    assert not absent, f"CAPABILITY ENTRY POINT REMOVED: {path}: {absent}"
+
+# Original untouched code can contain unsafe operations or incomplete flows:
+# do not mislabel this file-identity check as security or end-to-end UX proof.
+preserved = len(base) - len([p for p in base if p in ALLOWED_CHANGES])
+assert preserved >= 430, f"Unexpected baseline inventory size: {len(base)}"
+print(f"PASS: {preserved}/{len(base)} original Git blobs byte-for-byte unchanged;"
+      f" no deleted source and {len(MUST_CONTAIN)} feature paths with core entry points")
+print("LIMITATION: WhatsApp/SMS draft, approval, sending and Android animation"
+      " still require behavioral integration and physical device tests.")
