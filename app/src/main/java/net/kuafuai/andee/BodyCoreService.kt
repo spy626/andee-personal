@@ -781,7 +781,8 @@ class BodyCoreService : Service() {
                 }
             }
         }
-        startWsServer()
+        // SEC-01: Keep the unauthenticated legacy driver/viewer server OFF.
+        // LocalBrain and authenticated Friends pairing do not require it.
         // Before the brain, so the very first `type_text` finds the keyboard
         // where it expects it. A no-op unless the device is resting on the
         // headless IME — see [settleKeyboardOwner].
@@ -2539,6 +2540,7 @@ class BodyCoreService : Service() {
         try {
             val srv = BodyWsServer(
                 port = WS_PORT,
+                bindHost = "127.0.0.1",
                 registry = callExtensions,
                 onExtensionEvent = { kind, data -> onExtensionEvent(kind, data) },
                 onCommand = { method, params ->
@@ -2556,7 +2558,7 @@ class BodyCoreService : Service() {
             )
             srv.start()
             wsServer = srv
-            android.util.Log.i("Body", "ws server started on 0.0.0.0:$WS_PORT")
+            android.util.Log.i("Body", "legacy ws server started on 127.0.0.1:$WS_PORT")
         } catch (t: Throwable) {
             android.util.Log.e("Body", "ws server start failed", t)
         }
@@ -3237,6 +3239,10 @@ class BodyCoreService : Service() {
         val hc = net.kuafuai.andee.config.VoiceConfig.hubConfig(this)
         if (hc.url.isBlank()) {
             android.util.Log.i("Body", "hub_url not set — skipping outbound client")
+            return
+        }
+        if (!net.kuafuai.andee.net.NetworkPolicy.isSecureHubUrl(hc.url)) {
+            android.util.Log.e("Body", "Unsafe hub URL refused: only wss:// is allowed")
             return
         }
         val client = net.kuafuai.andee.net.BodyWsClient(
