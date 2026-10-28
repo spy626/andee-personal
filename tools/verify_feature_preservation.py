@@ -29,6 +29,7 @@ ALLOWED_CHANGES = {
     "core/src/main/kotlin/net/kuafuai/andee/net/NetworkPolicy.kt",
     "core/src/test/kotlin/net/kuafuai/andee/net/NetworkPolicyTest.kt",
     "tools/check_network_transport.py",
+    "SECURITY.md",  # Written disclosure of known risks, not runtime code.
 }
 
 def git(*args):
@@ -126,10 +127,10 @@ for path, tokens in MUST_CONTAIN.items():
 # Original untouched code can contain unsafe operations or incomplete flows:
 # do not mislabel this file-identity check as security or end-to-end UX proof.
 preserved = len(base) - len([p for p in base if p in ALLOWED_CHANGES])
-# Six original files may differ: CI, AGP, Gradle, and three transport
-# entry points. Every other original blob must exactly match its baseline SHA.
+# Seven original files may differ: CI, AGP, Gradle, three transport
+# entry points and SECURITY.md risk disclosure. Everything else must be exact.
 assert len(base) == 435, f"Original baseline inventory unexpectedly changed: {len(base)}"
-assert preserved >= 429, f"Original feature preservation threshold failed: {preserved}"
+assert preserved >= 428, f"Original feature preservation threshold failed: {preserved}"
 print(f"PASS: {preserved}/{len(base)} original Git blobs byte-for-byte unchanged;"
       f" no deleted source and {len(MUST_CONTAIN)} feature paths with core entry points")
 print("LIMITATION: WhatsApp/SMS draft, approval, sending and Android animation"
