@@ -19,6 +19,26 @@ claim that all vulnerabilities have been repaired.
 
 **This branch is not yet approved for installation on a daily-use phone.**
 
+### Phase 2 note: owner-approved local socket connections (unmerged draft)
+
+The stacked `recovery/phase2-local-connection-consent` branch now gates every
+loopback WebSocket connection (including passive viewers and call extensions)
+on a physical, unlocked-phone **Allow** button. Pending clients receive no
+broadcasts and cannot dispatch tools or register an extension before this
+approval. Approval only lasts for the single live TCP/WebSocket connection;
+reconnects require a new approval. Deny, voice, timeout, hidden/locked
+device, existing card or active task fail closed. A busy consent dialog and
+recent denials are throttled. This preserves the original local command frame
+and extension registration formats; no SMS, WhatsApp, voice or mascot runtime
+features were modified.
+
+**This is NOT cryptographic identity verification.** An arbitrary local app
+can still request a pairing prompt, the phone cannot reliably identify its
+true application UID from a loopback TCP socket, and the owner may be tricked
+into consenting. Physical Android acceptance and owner-authorized remote Hub
+pairing are still pending. Do not deploy on a primary device.
+
+
 
 This project runs as an accessibility service that can read the screen, perform
 gestures, and act on the user's behalf across every app. That makes it a

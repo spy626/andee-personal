@@ -29,6 +29,10 @@ ALLOWED_CHANGES = {
     "core/src/main/kotlin/net/kuafuai/andee/net/NetworkPolicy.kt",
     "core/src/test/kotlin/net/kuafuai/andee/net/NetworkPolicyTest.kt",
     "tools/check_network_transport.py",
+    # New local socket session-consent policy and its independent JVM tests.
+    "core/src/main/kotlin/net/kuafuai/andee/net/LocalPeerConsent.kt",
+    "core/src/test/kotlin/net/kuafuai/andee/net/LocalPeerConsentTest.kt",
+    "tools/check_local_connection_consent.py",
     "SECURITY.md",  # Written disclosure of known risks, not runtime code.
 }
 

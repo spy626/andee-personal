@@ -58,3 +58,21 @@ Changed runtime source is limited to:
 
 **Explicit limitations:** other Android apps may still reach the unauthenticated local port; WSS hubs are TLS-protected but no app-layer hub pairing is implemented. Notification prompt injection and irreversible action consent have not been fixed. Do not install this branch on a personal primary phone or consider it fully secure until these risks and physical acceptance are addressed. Exact SMS/WhatsApp draft/send experience is still a real-device acceptance requirement.
 
+
+## Phase 2 local per-socket consent (draft)
+
+`BodyWsServer` now queues a bounded set of initial frames (no dispatch / no
+event broadcast), and only enables a specific live socket after phone-side
+owner approval. This design keeps the original ADB and call-extension wire
+formats and passive viewer registration; pre-consent requests never execute.
+On socket close, authorization is revoked. Another local app can still request
+consent, so this is owner authorization **not cryptographic peer identity**.
+New `LocalPeerConsent` JVM tests reject voice/timeout/wrong label,
+locked device or hidden UI. CI checks that legacy local transport remains
+available but pre-consent requests and event broadcasts are gated.
+
+The new connection-level card may appear when using local debugging or call
+extensions. It does not replace or insert a second confirmation into any SMS,
+WhatsApp or normal assistant workflow. Verified tests are not a substitute for
+physical Android pairing, passive-viewer, extension and original message-reply
+acceptance. Recovery branch remains **not safe for a main phone**.
