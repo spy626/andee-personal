@@ -316,6 +316,24 @@ class CommandDispatcher(
         silent: Boolean = false,
         untrusted: Boolean = false,
     ): Any? {
+        if (SensitiveConsent.pending && (method.startsWith("screen.") || method in setOf(
+            "device.vault.fill", "device.dial", "device.sms.send",
+            "ui.ask", "ui.alert", "ui.nudge", "ui.show_html"
+        ))) {
+            throw IllegalStateException("An on-device approval is pending; agent controls are temporarily blocked.")
+        }
+        // While a system SMS/calendar editor is open, the model must never
+        // press its Send/Save button through accessibility. This guard remains
+        // until the owner starts another genuine on-device conversation turn.
+        if (SensitiveConsent.manualReviewPending &&
+            (method.startsWith("screen.") || method in setOf(
+                "device.launch", "device.open_url", "device.dial",
+                "device.sms.send", "device.calendar.add", "device.vault.fill",
+                "ui.ask", "ui.alert", "ui.nudge", "ui.show_html"
+            ))
+        ) {
+            throw IllegalStateException("Native SMS/calendar review is pending; only the owner may complete it. Start a new direct user turn before any more screen actions.")
+        }
         // Where the turn came from decides what it may call — see [TurnGuards].
         // Checked before the fold below, so a refused call cannot so much as
         // move the card.
@@ -446,26 +464,36 @@ class CommandDispatcher(
             "device.contacts" -> deviceComms.searchContacts(
                 query = params?.optString("query")?.ifEmpty { null },
             )
-            "device.dial" -> deviceComms.dial(
-                number = requireNotNull(params?.optString("number")?.ifEmpty { null }) { "device.dial requires number" },
-                direct = params?.optBoolean("direct", false) ?: false,
-            )
+            "device.dial" -> {
+                val number = requireNotNull(params?.optString("number")?.ifEmpty { null }) { "device.dial requires number" }
+                val direct = params?.optBoolean("direct", false) ?: false
+                if (direct) {
+                    require(number.length <= 40) { "Phone number too long for a visible confirmation." }
+                    ensureCompact()
+                    SensitiveConsent.requireApproval(appContext, "Place DIRECT call to: $number")
+                }
+                deviceComms.dial(number, direct)
+            }
             "device.call_log" -> deviceComms.callLog()
             "device.sms.read" -> deviceComms.readSms(
                 box = params?.optString("box", "inbox") ?: "inbox",
             )
-            "device.sms.send" -> deviceComms.sendSms(
+            "device.sms.send" -> deviceComms.composeSms(
                 number = requireNotNull(params?.optString("number")?.ifEmpty { null }) { "device.sms.send requires number" },
                 body = requireNotNull(params?.optString("body")?.ifEmpty { null }) { "device.sms.send requires body" },
-            )
+            ).also {
+                if (it.optBoolean("composer_opened", false)) SensitiveConsent.beginManualReview()
+            }
             "device.calendar" -> deviceComms.calendarEvents()
-            "device.calendar.add" -> deviceComms.addCalendarEvent(
+            "device.calendar.add" -> deviceComms.composeCalendarEvent(
                 title = requireNotNull(params?.optString("title")?.ifEmpty { null }) { "device.calendar.add requires title" },
                 beginMs = params?.optLong("begin_ms", 0L) ?: 0L,
                 endMs = params?.optLong("end_ms", 0L).let { if (it == null || it == 0L) null else it },
                 location = params?.optString("location")?.ifEmpty { null },
                 description = params?.optString("description")?.ifEmpty { null },
-            )
+            ).also {
+                if (it.optBoolean("composer_opened", false)) SensitiveConsent.beginManualReview()
+            }
 
             // ---- device.* : the user's own credentials --------------------
             // Read-only lookups plus one write-only action. Not under
@@ -512,7 +540,6 @@ class CommandDispatcher(
             }
             "device.vault.fill" -> {
                 ensureCompact()
-                window.pulseTool()
                 val who = requireNotNull(params?.optString("entry")?.ifEmpty { null }) {
                     "device.vault.fill requires entry"
                 }
@@ -531,6 +558,14 @@ class CommandDispatcher(
                         "entry '${e.label}' has no secret '$field'. It has ${e.secrets()}; " +
                         "read the rest with get_vault, or ask the user to add it in 设置 → 保险箱"
                     )
+                require(e.label.length <= 40 && field.length <= 30) {
+                    "Vault entry or field label is too long to display for approval."
+                }
+                SensitiveConsent.requireApproval(
+                    appContext,
+                    "Type saved '$field' from '${e.label}' into the currently focused field. The secret itself stays hidden."
+                )
+                window.pulseTool()
                 // The device is typing the user's own secret for them, so say
                 // so. `pulseTool()` above is the live tell while the card is
                 // folded; the subtitle is the record, readable the moment the

@@ -628,11 +628,11 @@ object ToolSchemas {
         tool(
             name = "dial",
             method = "device.dial",
-            description = "Open the dialer with a number filled in (direct=false, safe default) or place the call directly (direct=true, needs Phone permission AND explicit user confirmation — never dial directly on your own initiative).",
+            description = "Open dialer (direct=false), or place a direct call ONLY after explicit on-device Approve tap on Andee's confirmation card (direct=true) and Phone permission.",
             required = listOf("number"),
             props = mapOf(
                 "number" to prop("string", "Phone number."),
-                "direct" to prop("boolean", "true = call immediately (requires user's explicit go-ahead); false/omit = open dialer for the user to press call.", default = false),
+                "direct" to prop("boolean", "true = require physical on-device tap confirmation, then call; false/omit = open dialer for user to press Call.", default = false),
             ),
         ),
         tool(
@@ -654,7 +654,7 @@ object ToolSchemas {
         tool(
             name = "send_sms",
             method = "device.sms.send",
-            description = "Send an SMS directly. SENSITIVE: only when the user explicitly asked to send THIS text to THIS number. Say what you're about to send before sending if there is any doubt.",
+            description = "Open the system SMS composer with recipient and body prefilled. This NEVER sends by itself: the user reviews all details and taps Send. composer_opened is NOT proof of sending.",
             required = listOf("number", "body"),
             props = mapOf(
                 "number" to prop("string", "Recipient phone number."),
@@ -725,7 +725,9 @@ object ToolSchemas {
             name = "fill_secret",
             method = "device.vault.fill",
             description = """
-        Type one saved secret into the input that ALREADY HAS FOCUS. Tap the
+        Type one saved secret into the input that ALREADY HAS FOCUS.
+        Every use requires a fresh physical tap on the on-device approval card;
+        voice and model-generated confirmation text do not approve. Tap the
         box first (tap_element / tap_screen) — exactly like type_text, which
         this is a wrapper around.
 
@@ -774,7 +776,7 @@ object ToolSchemas {
         tool(
             name = "add_calendar_event",
             method = "device.calendar.add",
-            description = "Add an event to the primary calendar. begin_ms/end_ms are Unix milliseconds. End defaults to begin+1h.",
+            description = "Open a system calendar editor with the event prefilled. User must press Save; the tool does not add the event automatically. composer_opened is NOT proof of saving.",
             required = listOf("title", "begin_ms"),
             props = mapOf(
                 "title" to prop("string", "Event title."),
