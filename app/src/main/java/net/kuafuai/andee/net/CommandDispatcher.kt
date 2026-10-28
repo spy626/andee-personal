@@ -322,6 +322,18 @@ class CommandDispatcher(
         ))) {
             throw IllegalStateException("An on-device approval is pending; agent controls are temporarily blocked.")
         }
+        // While a system SMS/calendar editor is open, the model must never
+        // press its Send/Save button through accessibility. This guard remains
+        // until the owner starts another genuine on-device conversation turn.
+        if (SensitiveConsent.manualReviewPending &&
+            (method.startsWith("screen.") || method in setOf(
+                "device.launch", "device.open_url", "device.dial",
+                "device.sms.send", "device.calendar.add", "device.vault.fill",
+                "ui.ask", "ui.alert", "ui.nudge", "ui.show_html"
+            ))
+        ) {
+            throw IllegalStateException("Native SMS/calendar review is pending; only the owner may complete it. Start a new direct user turn before any more screen actions.")
+        }
         // Where the turn came from decides what it may call — see [TurnGuards].
         // Checked before the fold below, so a refused call cannot so much as
         // move the card.
@@ -469,7 +481,9 @@ class CommandDispatcher(
             "device.sms.send" -> deviceComms.composeSms(
                 number = requireNotNull(params?.optString("number")?.ifEmpty { null }) { "device.sms.send requires number" },
                 body = requireNotNull(params?.optString("body")?.ifEmpty { null }) { "device.sms.send requires body" },
-            )
+            ).also {
+                if (it.optBoolean("composer_opened", false)) SensitiveConsent.beginManualReview()
+            }
             "device.calendar" -> deviceComms.calendarEvents()
             "device.calendar.add" -> deviceComms.composeCalendarEvent(
                 title = requireNotNull(params?.optString("title")?.ifEmpty { null }) { "device.calendar.add requires title" },
@@ -477,7 +491,9 @@ class CommandDispatcher(
                 endMs = params?.optLong("end_ms", 0L).let { if (it == null || it == 0L) null else it },
                 location = params?.optString("location")?.ifEmpty { null },
                 description = params?.optString("description")?.ifEmpty { null },
-            )
+            ).also {
+                if (it.optBoolean("composer_opened", false)) SensitiveConsent.beginManualReview()
+            }
 
             // ---- device.* : the user's own credentials --------------------
             // Read-only lookups plus one write-only action. Not under

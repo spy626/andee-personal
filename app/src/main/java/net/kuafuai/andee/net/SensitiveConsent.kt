@@ -17,7 +17,19 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 object SensitiveConsent {
     private val asking = AtomicBoolean(false)
+    private val manualReview = AtomicBoolean(false)
     val pending: Boolean get() = asking.get()
+    val manualReviewPending: Boolean get() = manualReview.get()
+
+    /**
+     * After opening a system SMS/calendar editor, block ALL agent screen
+     * gestures until the owner sends a new direct voice/typed conversation
+     * turn. A model must not tap the Send/Save button it just exposed.
+     */
+    fun beginManualReview() { manualReview.set(true) }
+
+    /** Only called from the actual on-device user input path, never a tool. */
+    fun finishManualReviewByOwner() { manualReview.set(false) }
 
     fun requireApproval(context: Context, description: String) {
         check(Looper.myLooper() != Looper.getMainLooper()) { "Consent must be requested from a worker thread." }

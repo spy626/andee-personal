@@ -1099,6 +1099,12 @@ class BodyCoreService : Service() {
             android.util.Log.i("Body", "$how answered card: $said")
             return
         }
+        // The owner explicitly began a new conversation after reviewing a
+        // native SMS/calendar editor. Automation may now resume; a tool call
+        // or a non-owner debug event cannot clear this safety barrier.
+        if (how == "voice" || how == "typed") {
+            net.kuafuai.andee.net.SensitiveConsent.finishManualReviewByOwner()
+        }
         // The owner speaking outranks a friend's request on the same screen: it is cut off, and the friend told so.
         guestBrain?.cancel()
         android.util.Log.i("Body", "$how: $said" + if (images.isEmpty()) "" else " (+${images.size} images)")

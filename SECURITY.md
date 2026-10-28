@@ -169,6 +169,10 @@ unless its dispatcher calls the same `TurnGuards` policy.
   **Approve button** confirmation. Voice, substituted cards, timeout,
   device lock and no available overlay all reject the action.
 - Concurrent screen tool calls are blocked while an approval card is pending.
+- After opening a native SMS/calendar editor, all agent screen gestures
+  and overlapping device/UI actions are blocked until the user starts a NEW
+  direct voice/typed turn on this device. This prevents the assistant from
+  automatically tapping the native Send/Save button right after opening it.
 
 **Still out of scope:** a model could operate a third-party app's own
 payment, messaging or deletion UI using accessibility gestures. Explicit
