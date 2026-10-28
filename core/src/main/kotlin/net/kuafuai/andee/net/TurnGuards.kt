@@ -17,6 +17,25 @@ object TurnGuards {
 
     private val SCENE_WRITES = setOf("scene.save", "scene.enter", "scene.delete")
 
+    /**
+     * Fail closed on automatically triggered turns whose content originated outside the user.
+     * A notification or a todo derived from one may report facts and ask the user to open
+     * a new trusted turn, but may NOT perform side effects, read private account data,
+     * browse arbitrary screens, invoke extensions, or schedule more work.
+     *
+     * This deliberately prevents a hostile notification from talking the model into
+     * tapping Send, installing something, calling a number, or steering a robot dog.
+     * No prefix wildcards: a new tool must be reviewed before it becomes available
+     * to untrusted turns. The user's direct turns keep their current capabilities.
+     */
+    private val UNTRUSTED_PASSIVE_METHODS = setOf(
+        "device.battery", "device.connectivity", "device.facts", "device.steps",
+        "dog.status", "meeting.status",
+        "gear.list", "peer.list", "scene.list", "scene.get",
+        "tts.speak", "ui.alert", "ui.ask", "ui.nudge",
+    )
+
+
     private val PLAN_WRITES = setOf("note.directions", "note.day_plan")
 
     /**
@@ -87,6 +106,17 @@ object TurnGuards {
                 "This turn started from somebody else's words (a notification, or a friend's Andee), so scenes cannot be " +
                     "created, entered or deleted from it: $method. If it seems worth doing, ask the " +
                     "user next time they talk to you.",
+            )
+        }
+        // IMPORTANT: the specific restrictions above explain established sensitive tools
+        // (vault, peers, plans, scenes), but are not exhaustive. All other methods,
+        // including future extension tools, default to denied on an untrusted turn.
+        // This check lives in the dispatcher path, not in a prompt the model may ignore.
+        if (untrusted && method !in UNTRUSTED_PASSIVE_METHODS) {
+            throw IllegalStateException(
+                "A notification or another externally originated turn cannot run '$method'. " +
+                    "It may only report safe status or ask the user. Tell the user what " +
+                    "needs doing and let them request it in a new, direct conversation.",
             )
         }
     }

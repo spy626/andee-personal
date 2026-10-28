@@ -167,17 +167,14 @@ class LocalBrain(
         WAKE,
 
         /**
-         * A notification was triaged as worth acting on. Speaks back and may
-         * drive the device — but **not** with the user's credentials.
+         * A notification was triaged as worth mentioning. It can report a
+         * limited set of passive status facts and ask the user what to do,
+         * but it cannot drive the device, read private screen/account content,
+         * send messages or create persistent tasks.
          *
-         * The distinction exists because this is the only turn whose subject
-         * matter was written by a stranger. Everything in it came off another
-         * app's notification, so a hostile sender gets to put text in front of
-         * the model for free, and the one irreversible thing they could buy with
-         * it is the vault: a password typed into a form on a page they chose.
-         * The prompt tells the model the notification is data and not an
-         * instruction, which is a mitigation; [untrusted] is the half that does
-         * not depend on the model agreeing.
+         * A hostile sender controls the notification text, so the prompt alone
+         * is not a protection. [untrusted] reaches the fail-closed tool
+         * allowlist in [net.kuafuai.andee.net.TurnGuards].
          */
         NOTIFY,
 
