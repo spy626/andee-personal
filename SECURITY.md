@@ -158,6 +158,25 @@ perform risky actions without a universal OS-enforced confirmation gate.
 None of these claims applies to a separate desktop or third-party agent
 unless its dispatcher calls the same `TurnGuards` policy.
 
+### Phase 3 in this personal fork: sensitive action consent (partial)
+
+- `device.sms.send` now **opens the system SMS composer**. The SMS is
+  not sent until the person reviews the recipient/body and taps Send.
+- `device.calendar.add` now **opens the calendar editor**; the event
+  is not saved until the person taps Save.
+- Direct calls (`device.dial` with `direct=true`) and each individual
+  vault secret fill (`device.vault.fill`) require fresh on-device
+  **Approve button** confirmation. Voice, substituted cards, timeout,
+  device lock and no available overlay all reject the action.
+- Concurrent screen tool calls are blocked while an approval card is pending.
+
+**Still out of scope:** a model could operate a third-party app's own
+payment, messaging or deletion UI using accessibility gestures. Explicit
+approval is not yet enforced for those screen-mediated side effects.
+A manually configured WSS remote hub also has broad device authority;
+WSS is transport encryption, not application-layer hub authentication.
+Physical Android and OEM compatibility tests remain necessary.
+
 ### 4. The vault is not bound to device unlock
 
 `Vault` (`app/src/main/java/net/kuafuai/andee/config/Vault.kt`) encrypts entries

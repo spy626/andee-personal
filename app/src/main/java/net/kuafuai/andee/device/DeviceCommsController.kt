@@ -2,6 +2,7 @@ package net.kuafuai.andee.device
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.database.Cursor
 import android.net.Uri
@@ -9,7 +10,6 @@ import android.provider.CalendarContract
 import android.provider.CallLog
 import android.provider.ContactsContract
 import android.provider.Telephony
-import android.telephony.SmsManager
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -21,7 +21,7 @@ import java.util.Locale
  * ALL runtime permissions, ALL checked per call with graceful denial —
  * personal data is the one place a crash or a silent overreach is
  * unacceptable. Read paths report exactly what they saw; write paths
- * (sendSms) are deliberately explicit — the brain must confirm before firing.
+ * are handed to Android's native editor for the person to explicitly send/save.
  */
 class DeviceCommsController(private val context: Context) {
 
@@ -133,12 +133,19 @@ class DeviceCommsController(private val context: Context) {
             .put("messages", out)
     }
 
-    fun sendSms(number: String, body: String): JSONObject {
-        if (!ensurePermission(Manifest.permission.SEND_SMS)) return denied("send_sms")
+    /** Draft only: user has to press Send in the real messaging application. */
+    fun composeSms(number: String, body: String): JSONObject {
+        require(number.isNotBlank() && body.isNotBlank()) { "SMS recipient and body are required." }
         return runCatching {
-            SmsManager.getDefault().sendTextMessage(number, null, body, null, null)
-            JSONObject().put("sent", true).put("to", number).put("len", body.length)
-        }.getOrElse { JSONObject().put("error", "send failed: ${it.message}") }
+            context.startActivity(
+                Intent(Intent.ACTION_SENDTO, Uri.fromParts("smsto", number, null))
+                    .putExtra("sms_body", body)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+            JSONObject().put("composer_opened", true).put("sent", false)
+                .put("to", number)
+                .put("requires_user_action", "Review the full message and tap Send in the messaging app.")
+        }.getOrElse { JSONObject().put("error", "SMS composer failed to open: ${it.message}") }
     }
 
     // ---- calendar ----------------------------------------------------
@@ -176,38 +183,24 @@ class DeviceCommsController(private val context: Context) {
         return JSONObject().put("count", out.length()).put("events", out)
     }
 
-    fun addCalendarEvent(title: String, beginMs: Long, endMs: Long?, location: String?, description: String?): JSONObject {
-        if (!ensurePermission(Manifest.permission.WRITE_CALENDAR)) return denied("write_calendar")
-        val cv = android.content.ContentValues().apply {
-            put(CalendarContract.Events.CALENDAR_ID, primaryCalendarId())
-            put(CalendarContract.Events.TITLE, title)
-            put(CalendarContract.Events.DTSTART, beginMs)
-            put(CalendarContract.Events.DTEND, endMs ?: (beginMs + 3_600_000L))
-            put(CalendarContract.Events.EVENT_TIMEZONE, java.util.TimeZone.getDefault().id)
-            location?.let { put(CalendarContract.Events.EVENT_LOCATION, it) }
-            description?.let { put(CalendarContract.Events.DESCRIPTION, it) }
+    /** Draft only: the calendar provider is not written until the user saves. */
+    fun composeCalendarEvent(title: String, beginMs: Long, endMs: Long?, location: String?, description: String?): JSONObject {
+        require(title.isNotBlank()) { "Calendar event title is required." }
+        require(beginMs > 0L && (endMs == null || endMs > beginMs)) {
+            "Calendar event needs a valid start time and a later end time."
         }
         return runCatching {
-            val uri = context.contentResolver.insert(CalendarContract.Events.CONTENT_URI, cv)
-            if (uri != null) JSONObject().put("added", title).put("event_uri", uri.toString())
-            else JSONObject().put("error", "insert returned null")
-        }.getOrElse { JSONObject().put("error", "insert failed: ${it.message}") }
-    }
-
-    private fun primaryCalendarId(): Long {
-        context.contentResolver.query(
-            CalendarContract.Calendars.CONTENT_URI,
-            arrayOf(CalendarContract.Calendars._ID, CalendarContract.Calendars.IS_PRIMARY),
-            null, null, null,
-        )?.use { c ->
-            var first = -1L
-            while (c.moveToNext()) {
-                if (c.getInt(1) == 1) return c.getLong(0)
-                if (first < 0) first = c.getLong(0)
-            }
-            if (first >= 0) return first
-        }
-        return 1L
+            val intent = Intent(Intent.ACTION_INSERT, CalendarContract.Events.CONTENT_URI)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                .putExtra(CalendarContract.Events.TITLE, title)
+                .putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, beginMs)
+                .putExtra(CalendarContract.EXTRA_EVENT_END_TIME, endMs ?: (beginMs + 3_600_000L))
+            location?.let { intent.putExtra(CalendarContract.Events.EVENT_LOCATION, it) }
+            description?.let { intent.putExtra(CalendarContract.Events.DESCRIPTION, it) }
+            context.startActivity(intent)
+            JSONObject().put("composer_opened", true).put("added", false)
+                .put("requires_user_action", "Review the event and tap Save in the calendar app.")
+        }.getOrElse { JSONObject().put("error", "calendar editor failed to open: ${it.message}") }
     }
 
     // ---- permissions ----------------------------------------------------

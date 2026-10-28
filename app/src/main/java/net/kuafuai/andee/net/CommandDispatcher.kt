@@ -466,12 +466,12 @@ class CommandDispatcher(
             "device.sms.read" -> deviceComms.readSms(
                 box = params?.optString("box", "inbox") ?: "inbox",
             )
-            "device.sms.send" -> deviceComms.sendSms(
+            "device.sms.send" -> deviceComms.composeSms(
                 number = requireNotNull(params?.optString("number")?.ifEmpty { null }) { "device.sms.send requires number" },
                 body = requireNotNull(params?.optString("body")?.ifEmpty { null }) { "device.sms.send requires body" },
             )
             "device.calendar" -> deviceComms.calendarEvents()
-            "device.calendar.add" -> deviceComms.addCalendarEvent(
+            "device.calendar.add" -> deviceComms.composeCalendarEvent(
                 title = requireNotNull(params?.optString("title")?.ifEmpty { null }) { "device.calendar.add requires title" },
                 beginMs = params?.optLong("begin_ms", 0L) ?: 0L,
                 endMs = params?.optLong("end_ms", 0L).let { if (it == null || it == 0L) null else it },
