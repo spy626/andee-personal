@@ -84,48 +84,39 @@ vulnerabilities:
 Read these before deploying on a device you care about. They are design
 boundaries of the current version, not undisclosed bugs.
 
-### 1. The device-side WebSocket server is unauthenticated and binds to all interfaces
+### 1. Legacy device-side WebSocket server (hardened in this personal fork)
 
-`BodyWsServer` (`app/src/main/java/net/kuafuai/andee/net/BodyWsServer.kt`) is
-started by `ScreenBodyService` and listens on `0.0.0.0:9008`. `onOpen()` accepts
-every incoming connection as a driver without any credential check.
+Upstream Andee starts an unauthenticated debug/viewer WebSocket at
+`0.0.0.0:9008`, accepting requests that can read the screen and act on the
+user's logged-in device.
 
-**Impact:** any host that can reach the device's IP address can connect, with no
-credential, and drive it as fully as the app itself can — including reading what
-is on screen and using the credentials the user has saved on the device. Assume
-that means full control of the device, and of anything the user is logged into
-on it.
+**Security Phase 1 in this personal fork disables automatic startup.**
+`BodyCoreService` does not call `startWsServer()` during initialization.
+If developers explicitly re-enable the legacy listener for local debugging,
+its default bind address is `127.0.0.1`; incoming non-loopback sockets are
+also refused. The on-device brain and encrypted Friends peer link do not
+depend on the legacy listener.
 
-**When you are exposed:** whenever the accessibility service is enabled and the
-device shares a network with other hosts you do not control — café, hotel,
-airport, conference, or a shared corporate LAN.
+**Warning:** loopback is not authentication. Other applications on the
+same device could still reach a locally re-enabled debug listener.
+Never re-enable it on a device with sensitive accounts. Future remote control
+should have its own authenticated, specifically authorized transport.
+Android/physical-device verification is still required.
 
-**Mitigations available today:**
-
-- keep the device on a network you trust, or one where the port is firewalled
-- drive the device over `adb forward` instead of the LAN, and keep the server
-  unreachable from the network
-- treat a device with this service enabled as a device you would not leave
-  unattended on an untrusted network
-
-**The real fix** is to require authentication on every connection, and to make
-the bind address and port configurable with loopback-only as the default. That
-work is tracked as an open issue; contributions are welcome. Until it lands,
-this limitation stands.
-
-### 2. The body ↔ hub link is unauthenticated and plaintext
+### 2. The body ↔ hub link is unauthenticated; plaintext is blocked in this fork
 
 `BodyWsClient` registers with the hub using a plain `register` frame carrying
-`device_id`, `device_name` and the tool schemas. There is no token or signature,
-and `hub_url` is a user-supplied `ws://` endpoint with no TLS enforcement.
+`device_id`, `device_name` and the tool schemas. There is no application-level token or signature. In this fork, `ws://` is
+rejected before opening a connection, and only valid `wss://` addresses
+may be used; TLS does not prove that an otherwise arbitrary hub is authorized.
 
 **Impact:** on a hostile network, an attacker who can intercept or reach that
 link can observe tool calls and screen content in transit, and can present
 themselves as the hub to issue commands.
 
-**Mitigation:** only point `hub_url` at a host you control, on a network you
-trust. Running in `local` brain mode avoids the link entirely — the model is
-called over HTTPS by the app itself, and no inbound command channel exists.
+**Mitigation:** only point `hub_url` at a trusted host you control and ensure
+its TLS identity is valid. Running in `local` brain mode avoids the hub link
+entirely, though the on-device brain can still call cloud model endpoints.
 
 ### 3. Prompt injection from screen content
 

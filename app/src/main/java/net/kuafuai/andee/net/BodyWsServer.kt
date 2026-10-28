@@ -49,12 +49,12 @@ import java.util.concurrent.TimeUnit
  * [onCommand] returns a JSON-serializable value (usually JSONObject) or throws.
  * Thrown exceptions become error responses; nothing else propagates.
  *
- * Binding to 0.0.0.0 by default so the brain running on another host on the
- * LAN can reach it. Loopback-only is also fine when driven via adb forward.
+ * This unauthenticated legacy debugging path is disabled at startup by
+ * BodyCoreService. If used locally for development, it must remain loopback-only.
  */
 class BodyWsServer(
     port: Int,
-    bindHost: String = "0.0.0.0",
+    bindHost: String = "127.0.0.1",
     private val registry: CallExtensionRegistry,
     /** Extension-pushed event; the service turns these into hub broadcasts + UI updates. */
     private val onExtensionEvent: (kind: String, data: JSONObject) -> Unit = { _, _ -> },
@@ -99,6 +99,10 @@ class BodyWsServer(
     }
 
     override fun onOpen(conn: WebSocket, handshake: ClientHandshake?) {
+        if (conn.remoteSocketAddress?.address?.isLoopbackAddress != true) {
+            conn.close(1008, "Local-only socket")
+            return
+        }
         // Provisionally treat every new connection as a driver. If a register
         // frame arrives naming role=call_extension, we lift it back out.
         active.add(conn)
@@ -118,6 +122,10 @@ class BodyWsServer(
     }
 
     override fun onMessage(conn: WebSocket, message: String) {
+        if (conn.remoteSocketAddress?.address?.isLoopbackAddress != true) {
+            conn.close(1008, "Local-only socket")
+            return
+        }
         val msg = runCatching { JSONObject(message) }.getOrNull()
         if (msg == null) {
             Log.w(TAG, "non-JSON message ignored: ${message.take(100)}")

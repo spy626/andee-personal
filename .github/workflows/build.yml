@@ -13,8 +13,9 @@ name: build
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'security/**']
   pull_request:
+  workflow_dispatch:
 
 jobs:
   debug-apk:
@@ -34,6 +35,10 @@ jobs:
       # Host-side tests are template-only today, so this is a tripwire for the
       # day someone writes a real one rather than a meaningful gate now.
       - run: ./gradlew --no-daemon :app:testDebugUnitTest
+
+      # Security-specific JVM tests in :core are not part of app unit tests.
+      - run: ./gradlew --no-daemon :core:test
+      - run: python3 tools/check_network_security.py
 
       - uses: actions/upload-artifact@v4
         with:

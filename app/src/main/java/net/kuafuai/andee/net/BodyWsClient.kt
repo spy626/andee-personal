@@ -73,6 +73,10 @@ class BodyWsClient(
     private var backoffMs: Long = INITIAL_BACKOFF_MS
 
     fun start() {
+        if (!NetworkPolicy.isSecureHubUrl(url)) {
+            Log.e(TAG, "Refusing insecure hub URL; wss:// with a valid host required")
+            return
+        }
         if (!running.compareAndSet(false, true)) return
         Log.i(TAG, "starting hub client → $url  (device=$deviceId '$deviceName')")
         scheduleConnect(0)
