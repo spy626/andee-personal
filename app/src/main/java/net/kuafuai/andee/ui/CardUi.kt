@@ -18,6 +18,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import net.kuafuai.andee.R
 import net.kuafuai.andee.i18n.AppLocale
@@ -117,9 +118,13 @@ object CardUi {
         // 看看/忽略, the self-check nudge) has nobody waiting for words, so
         // unmatched speech must stay an ordinary turn and leave the card alone.
         captureSpeech: Boolean = false,
+        // Only for security-sensitive approval cards. Ordinary prompt cards
+        // keep their compact four-line face; the full sensitive details must
+        // never be ellipsized before the user decides.
+        fullText: Boolean = false,
         onDone: (Result) -> Unit,
     ) {
-        show(question, buttons, cancelable = false, timeoutMs, captureSpeech, onDone)
+        show(question, buttons, cancelable = false, timeoutMs, captureSpeech, fullText, onDone)
     }
 
     /**
@@ -131,7 +136,7 @@ object CardUi {
         // same condition one call later — so returning here changes nothing
         // observable, it just keeps the label lookup off a null.
         val ctx = appContext ?: return
-        show(text, listOf(AppLocale.str(ctx, R.string.card_ack)), cancelable = true, timeoutMs, false, onDone)
+        show(text, listOf(AppLocale.str(ctx, R.string.card_ack)), cancelable = true, timeoutMs, false, false, onDone)
     }
 
     /**
@@ -300,6 +305,7 @@ object CardUi {
         cancelable: Boolean,
         timeoutMs: Long,
         captureSpeech: Boolean,
+        fullText: Boolean,
         onDone: (Result) -> Unit,
     ) {
         val windowManager = wm ?: return
@@ -331,10 +337,28 @@ object CardUi {
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, Glass.Type.TITLE)
                 typeface = Typeface.DEFAULT_BOLD
                 setLineSpacing(dp(3).toFloat(), 1f)
-                maxLines = 4
-                ellipsize = android.text.TextUtils.TruncateAt.END
+                if (!fullText) {
+                    maxLines = 4
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                }
             }
-            cardReal.addView(title)
+            if (fullText) {
+                // The SMS body / phone number / vault target must be readable
+                // in full before approval. Limit height, not text contents.
+                // Scroll rather than silently truncate at four lines.
+                val detailScroll = ScrollView(context).apply {
+                    isFillViewport = false
+                    addView(title)
+                }
+                cardReal.addView(
+                    detailScroll,
+                    LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT, dp(160)
+                    ),
+                )
+            } else {
+                cardReal.addView(title)
+            }
 
             // Button row — buttons laid out right-to-left (primary last =
             // rightmost), spacing via layout params passed to addView.

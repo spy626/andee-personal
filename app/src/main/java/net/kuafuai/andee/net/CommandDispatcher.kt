@@ -309,6 +309,41 @@ class CommandDispatcher(
     /** What is installed and what it is for. Built on first use from [appContext]; one per dispatcher. */
     val gearShelf: net.kuafuai.andee.device.AndroidGear by lazy { net.kuafuai.andee.device.AndroidGear(appContext) }
 
+    /**
+     * A model response is NOT user consent. An AI tool may only perform a
+     * sensitive action after a real, local button tap on a card showing the
+     * actual target and payload. Voice guesses, timeouts, superseded cards and
+     * model-provided confirmation flags all fail closed.
+     *
+     * No approval is cached or reusable: this function is called immediately
+     * before each action. It also applies to hub-initiated tool calls.
+     */
+    private fun requirePhysicalApproval(action: String, details: String) {
+        check(Looper.myLooper() != Looper.getMainLooper()) {
+            "Sensitive actions must run off the UI thread"
+        }
+        val approve = AppLocale.str(appContext, R.string.cmd_ask_yes)
+        val cancel = AppLocale.str(appContext, R.string.cmd_ask_no)
+        val response = java.util.concurrent.atomic.AtomicReference<net.kuafuai.andee.ui.CardUi.Result?>()
+        val latch = java.util.concurrent.CountDownLatch(1)
+        net.kuafuai.andee.ui.CardUi.ask(
+            "$action\n$details", listOf(approve, cancel),
+            timeoutMs = 25_000L, captureSpeech = false, fullText = true,
+        ) { result ->
+            response.set(result)
+            latch.countDown()
+        }
+        // This is shorter than the LocalBrain tool timeout; a missing overlay
+        // or an unreachable user must never become an implicit permission.
+        val completed = latch.await(27_000L, java.util.concurrent.TimeUnit.MILLISECONDS)
+        val r = if (completed) response.get() else null
+        check(net.kuafuai.andee.net.SensitiveApproval.userTappedApprove(
+            r?.how, r?.button, approve
+        )) {
+            "Sensitive action not performed: physical approval was not given."
+        }
+    }
+
     fun dispatch(
         method: String,
         params: JSONObject?,
@@ -446,18 +481,30 @@ class CommandDispatcher(
             "device.contacts" -> deviceComms.searchContacts(
                 query = params?.optString("query")?.ifEmpty { null },
             )
-            "device.dial" -> deviceComms.dial(
-                number = requireNotNull(params?.optString("number")?.ifEmpty { null }) { "device.dial requires number" },
-                direct = params?.optBoolean("direct", false) ?: false,
-            )
+            "device.dial" -> {
+                val number = requireNotNull(params?.optString("number")?.ifEmpty { null }) {
+                    "device.dial requires number"
+                }
+                val direct = params?.optBoolean("direct", false) ?: false
+                if (direct) requirePhysicalApproval("Place a direct phone call?", "Number: $number")
+                deviceComms.dial(number = number, direct = direct)
+            }
             "device.call_log" -> deviceComms.callLog()
             "device.sms.read" -> deviceComms.readSms(
                 box = params?.optString("box", "inbox") ?: "inbox",
             )
-            "device.sms.send" -> deviceComms.sendSms(
-                number = requireNotNull(params?.optString("number")?.ifEmpty { null }) { "device.sms.send requires number" },
-                body = requireNotNull(params?.optString("body")?.ifEmpty { null }) { "device.sms.send requires body" },
-            )
+            "device.sms.send" -> {
+                val number = requireNotNull(params?.optString("number")?.ifEmpty { null }) {
+                    "device.sms.send requires number"
+                }
+                val body = requireNotNull(params?.optString("body")?.ifEmpty { null }) {
+                    "device.sms.send requires body"
+                }
+                // No preview truncation: the whole original message is placed
+                // inside a scrollable confirmation card, not a shortened copy.
+                requirePhysicalApproval("Send this SMS?", "To: $number\nMessage:\n$body")
+                deviceComms.sendSms(number = number, body = body)
+            }
             "device.calendar" -> deviceComms.calendarEvents()
             "device.calendar.add" -> deviceComms.addCalendarEvent(
                 title = requireNotNull(params?.optString("title")?.ifEmpty { null }) { "device.calendar.add requires title" },
@@ -511,8 +558,6 @@ class CommandDispatcher(
                 JSONObject().put("entry", e.label).put("field", field).put("value", value)
             }
             "device.vault.fill" -> {
-                ensureCompact()
-                window.pulseTool()
                 val who = requireNotNull(params?.optString("entry")?.ifEmpty { null }) {
                     "device.vault.fill requires entry"
                 }
@@ -531,6 +576,12 @@ class CommandDispatcher(
                         "entry '${e.label}' has no secret '$field'. It has ${e.secrets()}; " +
                         "read the rest with get_vault, or ask the user to add it in 设置 → 保险箱"
                     )
+                requirePhysicalApproval(
+                    "Fill a saved secret into the selected field?",
+                    "Vault entry: ${e.label}\nField: $field\nOnly approve if you trust the currently focused app.",
+                )
+                ensureCompact()
+                window.pulseTool()
                 // The device is typing the user's own secret for them, so say
                 // so. `pulseTool()` above is the live tell while the card is
                 // folded; the subtitle is the record, readable the moment the
