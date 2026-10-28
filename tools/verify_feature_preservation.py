@@ -21,6 +21,15 @@ ALLOWED_CHANGES = {
     "docs/FEATURE_PRESERVATION_RECOVERY.md",
     "docs/FEATURE_PARITY_AUDIT.md",
     "tools/verify_feature_preservation.py",
+    # Explicitly scoped transport fixes. Existing UI/messaging/tool
+    # dispatch/voice/rendering source must remain byte-for-byte identical.
+    "app/src/main/java/net/kuafuai/andee/BodyCoreService.kt",
+    "app/src/main/java/net/kuafuai/andee/net/BodyWsServer.kt",
+    "app/src/main/java/net/kuafuai/andee/net/BodyWsClient.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/net/NetworkPolicy.kt",
+    "core/src/test/kotlin/net/kuafuai/andee/net/NetworkPolicyTest.kt",
+    "tools/check_network_transport.py",
+    "SECURITY.md",  # Written disclosure of known risks, not runtime code.
 }
 
 def git(*args):
@@ -106,6 +115,9 @@ MUST_CONTAIN = {
     "core/src/main/kotlin/net/kuafuai/andee/net/TurnGuards.kt": (
         "fun check(", 'method.startsWith("device.vault.")',
     ),
+    "core/src/main/kotlin/net/kuafuai/andee/net/NetworkPolicy.kt": (
+        "fun isSecureHubUrl(", '"wss"',
+    ),
 }
 for path, tokens in MUST_CONTAIN.items():
     data = (ROOT / path).read_text(encoding="utf-8")
@@ -115,7 +127,10 @@ for path, tokens in MUST_CONTAIN.items():
 # Original untouched code can contain unsafe operations or incomplete flows:
 # do not mislabel this file-identity check as security or end-to-end UX proof.
 preserved = len(base) - len([p for p in base if p in ALLOWED_CHANGES])
-assert preserved >= 430, f"Unexpected baseline inventory size: {len(base)}"
+# Seven original files may differ: CI, AGP, Gradle, three transport
+# entry points and SECURITY.md risk disclosure. Everything else must be exact.
+assert len(base) == 435, f"Original baseline inventory unexpectedly changed: {len(base)}"
+assert preserved >= 428, f"Original feature preservation threshold failed: {preserved}"
 print(f"PASS: {preserved}/{len(base)} original Git blobs byte-for-byte unchanged;"
       f" no deleted source and {len(MUST_CONTAIN)} feature paths with core entry points")
 print("LIMITATION: WhatsApp/SMS draft, approval, sending and Android animation"

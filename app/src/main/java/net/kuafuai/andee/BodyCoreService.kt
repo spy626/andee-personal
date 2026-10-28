@@ -2539,6 +2539,9 @@ class BodyCoreService : Service() {
         try {
             val srv = BodyWsServer(
                 port = WS_PORT,
+                // Preserve adb-forward and local extensions, never expose
+                // this unauthenticated control socket on the LAN.
+                bindHost = "127.0.0.1",
                 registry = callExtensions,
                 onExtensionEvent = { kind, data -> onExtensionEvent(kind, data) },
                 onCommand = { method, params ->
@@ -2556,7 +2559,7 @@ class BodyCoreService : Service() {
             )
             srv.start()
             wsServer = srv
-            android.util.Log.i("Body", "ws server started on 0.0.0.0:$WS_PORT")
+            android.util.Log.i("Body", "ws server started on 127.0.0.1:$WS_PORT (local only)")
         } catch (t: Throwable) {
             android.util.Log.e("Body", "ws server start failed", t)
         }
@@ -3237,6 +3240,11 @@ class BodyCoreService : Service() {
         val hc = net.kuafuai.andee.config.VoiceConfig.hubConfig(this)
         if (hc.url.isBlank()) {
             android.util.Log.i("Body", "hub_url not set — skipping outbound client")
+            return
+        }
+        if (!net.kuafuai.andee.net.NetworkPolicy.isSecureHubUrl(hc.url)) {
+            android.util.Log.w("Body", "refusing invalid/plaintext hub URL")
+            reportNoBrain("Remote Hub needs a valid wss:// address. Change it in Settings.")
             return
         }
         val client = net.kuafuai.andee.net.BodyWsClient(

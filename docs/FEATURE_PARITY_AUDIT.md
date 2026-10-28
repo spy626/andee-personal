@@ -45,3 +45,16 @@
 - Test remote-hub identity/authentication and injection resistance without disabling the working interaction; no new phone-to-phone control until explicitly requested.
 
 **No source-preservation claim should be promoted to end-to-end feature-parity success without these Android device tests.**
+
+## Feature-preserving network transport patch — separate draft
+
+Changed runtime source is limited to:
+- `BodyCoreService.kt`: explicitly bind original local WebSocket to 127.0.0.1, refuse invalid/plaintext remote Hub URLs.
+- `BodyWsServer.kt`: loopback-only default and extra reject-on-open/frame protection.
+- `BodyWsClient.kt`: WSS preflight before connecting.
+- New shared `NetworkPolicy` and JVM + CI guards.
+
+**Preservation:** the `LocalBrain`, `NotificationRelayService`, `NotificationTriage`, `DeviceCommsController`, `CommandDispatcher`, `CardUi`, `FloatingWindowUi`, animation renderer/moods, and all existing SMS/WhatsApp/voice/screen/peer code remain byte-for-byte unchanged. Legacy localhost/ADB-forward/call-extension socket keeps starting; LAN socket access is deliberately removed.
+
+**Explicit limitations:** other Android apps may still reach the unauthenticated local port; WSS hubs are TLS-protected but no app-layer hub pairing is implemented. Notification prompt injection and irreversible action consent have not been fixed. Do not install this branch on a personal primary phone or consider it fully secure until these risks and physical acceptance are addressed. Exact SMS/WhatsApp draft/send experience is still a real-device acceptance requirement.
+

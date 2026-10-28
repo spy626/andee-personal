@@ -73,6 +73,12 @@ class BodyWsClient(
     private var backoffMs: Long = INITIAL_BACKOFF_MS
 
     fun start() {
+        // Do not rely solely on settings preflight: fail closed for any
+        // direct/future caller before creating a remote control connection.
+        if (!NetworkPolicy.isSecureHubUrl(url)) {
+            Log.w(TAG, "hub URL rejected: wss:// is required")
+            return
+        }
         if (!running.compareAndSet(false, true)) return
         Log.i(TAG, "starting hub client → $url  (device=$deviceId '$deviceName')")
         scheduleConnect(0)

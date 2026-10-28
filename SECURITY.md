@@ -1,5 +1,25 @@
 # Security Policy
 
+## Personal-fork recovery transport branch: scoped changes only
+
+This document originally describes the upstream `main` security posture.
+In the separate, **unmerged** `recovery/phase1-network-transport` branch,
+the legacy WebSocket listener binds **127.0.0.1:9008** (not all LAN
+interfaces), rejects non-loopback peers, and remote Hub clients require
+`wss://` TLS URLs. Original local adb-forward and same-device integrations
+still have their socket entry point.
+
+**Do not interpret these constraints as full security.** Any locally installed
+Android app may still reach the unauthenticated loopback port and request
+device actions. A remote WSS hub is not cryptographically authorized by an
+application-level pairing mechanism. Untrusted screen/notification prompt
+injection and sensitive tool use are also unresolved in this branch.
+The old sections below document the upstream starting threat model, not a
+claim that all vulnerabilities have been repaired.
+
+**This branch is not yet approved for installation on a daily-use phone.**
+
+
 This project runs as an accessibility service that can read the screen, perform
 gestures, and act on the user's behalf across every app. That makes it a
 high-value target, and it means "the app can read my screen" is the intended
