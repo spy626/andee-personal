@@ -158,6 +158,18 @@ perform risky actions without a universal OS-enforced confirmation gate.
 None of these claims applies to a separate desktop or third-party agent
 unless its dispatcher calls the same `TurnGuards` policy.
 
+**Personal fork, Security Phase 3:** Sending SMS, placing a direct call, and
+typing a vault secret now require a per-action local approval card. The target
+and exact SMS body are shown in a scrollable card. Only a physical press on
+the approve button counts; voice, timeout and dismissal deny the action.
+The app does not cache approval or accept confirmation flags from the model.
+
+**Limitations:** An untrusted hub could still request other tools or drive
+`screen.*` to operate the interface. A local overlay tap is not equivalent to
+Android biometric authentication. Sensitive operations performed via UI
+gestures or third-party extension tools are not yet gated. The hub still
+lacks application-layer peer authentication, so avoid hub mode until hardened.
+
 ### 4. The vault is not bound to device unlock
 
 `Vault` (`app/src/main/java/net/kuafuai/andee/config/Vault.kt`) encrypts entries
