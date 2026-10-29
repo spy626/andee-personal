@@ -31,6 +31,10 @@ ALLOWED_CHANGES = {
     "app/src/main/AndroidManifest.xml",
     "tools/check_vault_biometric_only.py",
     "docs/PHASE9_VAULT_BIOMETRIC_ONLY.md",
+    # Phase 9.1: Vault-only screen lock regression. No other production files.
+    "app/src/androidTest/java/net/kuafuai/andee/acceptance/VaultScreenLockTest.java",
+    "tools/check_vault_screen_lock.py",
+    "docs/PHASE9_1_SCREEN_LOCK_REVOCATION.md",
     "docs/PHASE8_V080_INTEGRATION.md",
     # Explicitly scoped transport fixes. Existing UI/messaging/tool
     # dispatch/voice/rendering source must remain byte-for-byte identical.
