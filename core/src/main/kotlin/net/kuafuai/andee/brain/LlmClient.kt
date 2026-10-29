@@ -176,6 +176,12 @@ class LlmClient(
             // Other OpenAI-compatible gateways may reject DeepSeek's custom
             // thinking field. Never infer that an arbitrary paid model is free.
             FreeProviderGuard.validate(freeProvider, baseUrl, model)
+            // This also enforces Groq's OFF-by-default Free-account switch:
+            // VoiceConfig supplies no key until explicitly acknowledged.
+            // Fail before constructing ANY inference request with user data.
+            if (apiKey.isBlank()) {
+                throw IllegalStateException("Free provider key or approval missing; no request sent")
+            }
             if (freeProvider == FreeProviderGuard.OPENROUTER) {
                 body.put("provider", JSONObject().put("max_price", JSONObject()
                     .put("prompt", 0).put("completion", 0)))
