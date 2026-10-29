@@ -178,7 +178,9 @@ preserved = len(base) - len([p for p in base if p in ALLOWED_CHANGES])
 # The reviewed security paths may differ; all other v0.8.0 source and assets
 # must remain exactly the same as the original release.
 assert len(base) == 474, f"Upstream v0.8.0 baseline inventory unexpectedly changed: {len(base)}"
-assert preserved >= 474-14, f"v0.8.0 feature preservation threshold failed: {preserved}"
+# Phase 9 reviews three more original files (Vault, VaultUi, Manifest); the
+# dedicated Phase 9 gate also compares every unrelated runtime file to Phase 8.
+assert preserved >= 458, f"v0.8.0 feature preservation threshold failed: {preserved}"
 unchanged = sum(base[p] == head[p] for p in base)
 print(f"PASS: {unchanged}/{len(base)} upstream v0.8.0 Git blobs byte-for-byte unchanged;"
       f" no deleted source and {len(MUST_CONTAIN)} feature paths with core entry points")
