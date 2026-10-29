@@ -61,6 +61,9 @@ ALLOWED_CHANGES = {
     # Phase 10B.2: xKiro free catalog diagnostics and documented ID only.
     "tools/check_xkiro_catalog_fix.py",
     "docs/PHASE10B2_XKIRO_CATALOG_FIX.md",
+    # Phase 10B.3: xKiro free-only Auto routing and migration.
+    "tools/check_xkiro_auto_scope.py",
+    "docs/PHASE10B3_XKIRO_AUTO_FREE.md",
     "docs/PHASE8_V080_INTEGRATION.md",
     # Explicitly scoped transport fixes. Existing UI/messaging/tool
     # dispatch/voice/rendering source must remain byte-for-byte identical.
