@@ -107,18 +107,15 @@ def region(s, start, end):
     return s[s.index(start):s.index(end)]
 # The actual exact zero-cost+tools model parser and free-host/model list are
 # BYTE IDENTICAL to the last phone-tested Phase 10B.4 snapshot.
-for start,end in [
+# Preserve the free/zero-price/tools parser and whole Auto eligibility
+# unchanged; only the /usage preflights + new quota parser may differ.
+for start,end in (
     ("    fun models(provider:", "    fun endpoint(provider:"),
-    ("    fun catalogProblem(", "    fun quotaProblem(") if "    fun quotaProblem(" in old_guard else ("    fun catalogProblem(", "    fun quotaIsVerifiedFree("),
-]:
-    # The second region includes newly placed Auto code and unchanged pricing;
-    # its cut point is the original quota method, same region before quota.
-    if start == "    fun catalogProblem(":
-        end="    fun quotaIsVerifiedFree(" if "    fun quotaIsVerifiedFree(" in old_guard else end
-        current_end="    fun quotaProblem("
-        assert region(old_guard,start,end)==region(guard,start,current_end), "Free model price/tool catalog changed"
-    else:
-        assert region(old_guard,start,end)==region(guard,start,end), "Allowed models changed"
+    ("    fun catalogProblem(", "    fun preflightXKiroAuto("),
+):
+    assert region(old_guard,start,end)==region(guard,start,end), (
+        f"Free-model catalog/tool/price or model whitelist changed: {start}"
+    )
 for token in (
     'if (item.optString("access_tier") != "free")',
     'if (amount.compareTo(BigDecimal.ZERO) != 0)',
