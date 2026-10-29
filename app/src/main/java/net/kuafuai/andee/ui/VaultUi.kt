@@ -2,6 +2,9 @@ package net.kuafuai.andee.ui
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
+import net.kuafuai.andee.config.VaultBioGate
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.text.InputType
@@ -61,6 +64,14 @@ class VaultUi(
 
     fun show() {
         if (root != null) return
+        // Only the credential Vault asks for a biometric unlock. Everything
+        // else Andee does (SMS, WhatsApp, taps, autonomous work) is unchanged.
+        if (!VaultBioGate.ready(context)) {
+            VaultBioGate.request(context) { allowed ->
+                if (allowed) Handler(Looper.getMainLooper()).post { show() }
+            }
+            return
+        }
         val p = WindowManager.LayoutParams(
             cardWidth(), cardHeight(),
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
@@ -78,12 +89,18 @@ class VaultUi(
             root = v
             OwnCard.shown()
             Glass.enter(v)
+            // Close stored credential fields before the biometric session
+            // expires; a later open requires biometric again.
+            Handler(Looper.getMainLooper()).postDelayed({
+                if (root === v) { editing = null; hide() }
+            }, VaultBioGate.sessionMillis() - 500L)
         }
     }
 
     fun hide() {
         val v = root ?: return
         root = null
+        editing = null
         Glass.exit(v) {
             runCatching { wm.removeView(v) }
             OwnCard.hidden()
