@@ -1128,7 +1128,7 @@ class SettingsUi(
             rowLabel(block, lctx.getString(R.string.settings_free_model))
             val models = FreeProviderGuard.models(id)
             val names = when (id) {
-                FreeProviderGuard.XKIRO -> listOf("DeepSeek Free", "Qwen Free")
+                FreeProviderGuard.XKIRO -> listOf("Auto Free", "Qwen Free")
                 FreeProviderGuard.GROQ -> listOf("GPT-OSS 120B", "GPT-OSS 20B")
                 else -> listOf("Auto Free")
             }
