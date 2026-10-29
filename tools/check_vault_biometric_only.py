@@ -28,6 +28,10 @@ allowed = {
     "tools/verify_feature_preservation.py",
     "tools/check_vault_biometric_only.py",
     "docs/PHASE9_VAULT_BIOMETRIC_ONLY.md",
+    # Phase 9.1: screen-lock revocation and regression tests, no ordinary tool edits.
+    "app/src/androidTest/java/net/kuafuai/andee/acceptance/VaultScreenLockTest.java",
+    "tools/check_vault_screen_lock.py",
+    "docs/PHASE9_1_SCREEN_LOCK_REVOCATION.md",
 }
 actual = set(git("diff", "--name-only", PHASE8, "HEAD").splitlines())
 assert actual <= allowed, f"Unreviewed changes outside Vault: {sorted(actual - allowed)}"
