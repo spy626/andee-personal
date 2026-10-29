@@ -58,8 +58,12 @@ class VaultUnlockActivity : Activity() {
     private fun respond(success: Boolean) {
         if (finished) return
         finished = true
-        VaultBioGate.complete(success)
+        // Return focus to the user's original app before the Vault caller
+        // resumes (especially automatic credential fill into another app).
         finish()
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            VaultBioGate.complete(success)
+        }, 450L)
     }
 
     override fun onDestroy() {
