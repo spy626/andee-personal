@@ -40,6 +40,15 @@ class SettingsLockedVaultTest {
             )
             try {
                 settings.show()
+                // Phase 10A moved Vault into its own Settings category.
+                // Build the actual Vault & Tools page while still locked.
+                val page = SettingsUi::class.java.getDeclaredField("page")
+                    .apply { isAccessible = true }
+                page.set(settings, page.type.enumConstants.first {
+                    (it as Enum<*>).name == "DEVICE"
+                })
+                SettingsUi::class.java.getDeclaredMethod("build")
+                    .apply { isAccessible = true }.invoke(settings)
             } catch (t: Throwable) {
                 error.set(t)
             } finally {
