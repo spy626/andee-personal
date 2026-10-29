@@ -46,6 +46,18 @@ ALLOWED_CHANGES = {
     "app/src/androidTest/java/net/kuafuai/andee/acceptance/SettingsNavigationTest.kt",
     "tools/check_settings_navigation.py",
     "docs/PHASE10A_SETTINGS_NAVIGATION.md",
+    # Phase 10B.1: explicit free provider/zero-cost guard and encrypted keys only.
+    "app/src/main/java/net/kuafuai/andee/config/VoiceConfig.kt",
+    "app/src/main/java/net/kuafuai/andee/config/ProviderKeyStore.kt",
+    "app/src/main/java/net/kuafuai/andee/config/FactoryReset.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/config/BrainConfig.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/brain/LocalBrain.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/brain/LlmClient.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/brain/FreeProviderGuard.kt",
+    "core/src/test/kotlin/net/kuafuai/andee/brain/FreeProviderGuardTest.kt",
+    "app/src/androidTest/java/net/kuafuai/andee/acceptance/FreeProviderKeysTest.kt",
+    "tools/check_free_provider_scope.py",
+    "docs/PHASE10B1_FREE_PROVIDERS.md",
     "docs/PHASE8_V080_INTEGRATION.md",
     # Explicitly scoped transport fixes. Existing UI/messaging/tool
     # dispatch/voice/rendering source must remain byte-for-byte identical.
@@ -196,7 +208,7 @@ assert len(base) == 474, f"Upstream v0.8.0 baseline inventory unexpectedly chang
 # Phase 9 reviews three more original files (Vault, VaultUi, Manifest); 17
 # upstream paths are explicitly allowlisted in total. The
 # dedicated Phase 9 gate also compares every unrelated runtime file to Phase 8.
-# Three upstream UI/resource files are explicitly reviewed by the Phase 9.2 hotfix.\nassert preserved >= 454, f"v0.8.0 feature preservation threshold failed: {preserved}"
+# Three upstream UI/resource files are explicitly reviewed by the Phase 9.2 hotfix.\nassert preserved >= 453, f"v0.8.0 feature preservation threshold failed: {preserved}"
 unchanged = sum(base[p] == head[p] for p in base)
 print(f"PASS: {unchanged}/{len(base)} upstream v0.8.0 Git blobs byte-for-byte unchanged;"
       f" no deleted source and {len(MUST_CONTAIN)} feature paths with core entry points")

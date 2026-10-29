@@ -67,6 +67,7 @@ class LlmClient(
     model: String,
     thinking: Boolean,
     reasoningEffort: String,
+    private val freeProvider: String = "legacy",
 ) {
 
     // Request parameters, read once per [complete]. Volatile because [retune]
@@ -163,11 +164,34 @@ class LlmClient(
         if (tools.length() > 0) {
             body.put("tools", tools).put("tool_choice", "auto")
         }
-        if (thinking && !noThinking) {
-            body.put("thinking", JSONObject().put("type", "enabled"))
-            body.put("reasoning_effort", reasoningEffort)
+        if (freeProvider == "legacy") {
+            // Preserve the exact original DeepSeek/CodeFlying wire contract.
+            if (thinking && !noThinking) {
+                body.put("thinking", JSONObject().put("type", "enabled"))
+                body.put("reasoning_effort", reasoningEffort)
+            } else {
+                body.put("thinking", JSONObject().put("type", "disabled"))
+            }
         } else {
-            body.put("thinking", JSONObject().put("type", "disabled"))
+            // Other OpenAI-compatible gateways may reject DeepSeek's custom
+            // thinking field. Never infer that an arbitrary paid model is free.
+            FreeProviderGuard.validate(freeProvider, baseUrl, model)
+            // This also enforces Groq's OFF-by-default Free-account switch:
+            // VoiceConfig supplies no key until explicitly acknowledged.
+            // Fail before constructing ANY inference request with user data.
+            if (apiKey.isBlank()) {
+                throw IllegalStateException("Free provider key or approval missing; no request sent")
+            }
+            if (freeProvider == FreeProviderGuard.OPENROUTER) {
+                body.put("provider", JSONObject().put("max_price", JSONObject()
+                    .put("prompt", 0).put("completion", 0)))
+            }
+        }
+        if (freeProvider == FreeProviderGuard.XKIRO) {
+            // Two read-only zero-cost GETs before EVERY inference POST.
+            // A catalog or quota failure prevents all messages/tools/screens
+            // from reaching xKiro; never fall back to any paid route.
+            FreeProviderGuard.preflightXKiro(http, apiKey, model)
         }
 
         val req = Request.Builder()

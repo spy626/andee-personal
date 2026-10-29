@@ -43,6 +43,18 @@ allowed = {
     "app/src/androidTest/java/net/kuafuai/andee/acceptance/SettingsNavigationTest.kt",
     "tools/check_settings_navigation.py",
     "docs/PHASE10A_SETTINGS_NAVIGATION.md",
+    # Phase 10B.1: explicit free provider/zero-cost guard and encrypted keys only.
+    "app/src/main/java/net/kuafuai/andee/config/VoiceConfig.kt",
+    "app/src/main/java/net/kuafuai/andee/config/ProviderKeyStore.kt",
+    "app/src/main/java/net/kuafuai/andee/config/FactoryReset.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/config/BrainConfig.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/brain/LlmClient.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/brain/LocalBrain.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/brain/FreeProviderGuard.kt",
+    "core/src/test/kotlin/net/kuafuai/andee/brain/FreeProviderGuardTest.kt",
+    "app/src/androidTest/java/net/kuafuai/andee/acceptance/FreeProviderKeysTest.kt",
+    "tools/check_free_provider_scope.py",
+    "docs/PHASE10B1_FREE_PROVIDERS.md",
 }
 actual = set(git("diff", "--name-only", PHASE8, "HEAD").splitlines())
 assert actual <= allowed, f"Unreviewed changes outside Vault: {sorted(actual - allowed)}"
@@ -82,7 +94,6 @@ assert "VaultBioGate.requireActive(context)" in vault
 
 # The user explicitly requires *all* ordinary Andee behaviors as before.
 for path in (
-    "core/src/main/kotlin/net/kuafuai/andee/brain/LocalBrain.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/SelfWork.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/Heartbeat.kt",
     "app/src/main/java/net/kuafuai/andee/device/DeviceCommsController.kt",

@@ -22,6 +22,8 @@ import net.kuafuai.andee.config.FactoryReset
 import net.kuafuai.andee.config.Notebook
 import net.kuafuai.andee.config.Vault
 import net.kuafuai.andee.config.VaultBioGate
+import net.kuafuai.andee.config.ProviderKeyStore
+import net.kuafuai.andee.brain.FreeProviderGuard
 import net.kuafuai.andee.config.VoiceConfig
 import net.kuafuai.andee.i18n.AppLocale
 import net.kuafuai.andee.wake.WakeTemplates
@@ -804,13 +806,18 @@ class SettingsUi(
 
         // ---- 本机 tab: LLM + 火山 voice rows ----
         val localBlock = block(panel)
+        val legacyLlmBlock = block(localBlock)
+        freeProviderSection(panel, legacyLlmBlock) {
+            // A deliberately chosen free provider uses the original LocalBrain.
+            pickBrain(VoiceConfig.BRAIN_LOCAL)
+        }
         // The hint *is* the value a blank row resolves to, so the hint and the
         // resolved config come from the same language-aware pair — see
         // [VoiceConfig.llmModelDefault]. An English card advertises an OpenAI
         // model / base URL and, if the user never saves one, actually calls it;
         // a Chinese card stays on DeepSeek.
         field(
-            localBlock,
+            legacyLlmBlock,
             "llm_api_key",
             lctx.getString(R.string.settings_llm_api_key),
             hint = "sk-…",
@@ -821,17 +828,17 @@ class SettingsUi(
         // moves the tab under their finger rather than sending them up to
         // find which cell that was — and it only moves the pick; 保存 still
         // commits it, like every other row.
-        linkNote(localBlock, lctx.getString(R.string.settings_no_key_use_codeflying)) {
+        linkNote(legacyLlmBlock, lctx.getString(R.string.settings_no_key_use_codeflying)) {
             pickBrain(VoiceConfig.BRAIN_CODEFLYING)
         }
         field(
-            localBlock,
+            legacyLlmBlock,
             "llm_model",
             lctx.getString(R.string.settings_llm_model),
             hint = VoiceConfig.llmModelDefault(context),
         )
         field(
-            localBlock,
+            legacyLlmBlock,
             "llm_base_url",
             lctx.getString(R.string.settings_llm_base_url),
             hint = VoiceConfig.llmBaseUrlDefault(context),
@@ -1049,6 +1056,114 @@ class SettingsUi(
             Glass.setVisible(effortBlock, th != "disabled", animate)
         }
         applyThinking(thinking, false)
+    }
+
+    /**
+     * Phase 10B.1: an explicit local-provider choice, not a second agent.
+     * The original legacy model/key/base-url controls are still available and
+     * have their exact old preferences and backend. They are simply hidden
+     * when a free provider was explicitly chosen.
+     *
+     * Credentials are never prefilled: a blank key means "keep the encrypted
+     * key already on this phone", not "delete it".
+     */
+    private fun freeProviderSection(
+        parent: LinearLayout,
+        legacyBlock: LinearLayout,
+        chooseLocalBrain: () -> Unit,
+    ) {
+        val panel = group(
+            parent,
+            lctx.getString(R.string.settings_free_provider_heading),
+            lctx.getString(R.string.settings_free_provider_note),
+        )
+        val choices = listOf(
+            FreeProviderGuard.LEGACY to lctx.getString(R.string.settings_free_legacy),
+            FreeProviderGuard.XKIRO to "xKiro Free",
+            FreeProviderGuard.GROQ to "Groq Free",
+            FreeProviderGuard.OPENROUTER to "OpenRouter Free",
+        )
+        var selected = saved["free_provider"].orEmpty().takeIf { value ->
+            choices.any { it.first == value }
+        } ?: FreeProviderGuard.LEGACY
+        val blocks = mutableMapOf<String, LinearLayout>()
+        val selectors = mutableMapOf<String, TextView>()
+        var updateVisibility: (Boolean) -> Unit = {}
+        for ((id, name) in choices) {
+            val chip = TextView(context).apply {
+                text = name
+                textSize = Glass.Type.BODY
+                setTextColor(Color.parseColor(Glass.TITLE))
+                background = Glass.well(context, dp(12))
+                setPadding(dp(14), dp(12), dp(14), dp(12))
+                isClickable = true
+                isFocusable = true
+                contentDescription = name
+                Glass.pressable(this)
+                setOnClickListener {
+                    selected = id
+                    if (id != FreeProviderGuard.LEGACY) chooseLocalBrain()
+                    updateVisibility(true)
+                }
+            }
+            selectors[id] = chip
+            panel.addView(chip, rowParams(dp(7)))
+        }
+        picks["free_provider"] = { selected }
+
+        for ((id, _) in choices.drop(1)) {
+            val block = block(panel)
+            blocks[id] = block
+            note(block, lctx.getString(R.string.settings_free_key_note))
+            val key = "free_key_$id"
+            val hasStoredKey = runCatching {
+                ProviderKeyStore.get(context, id).isNotBlank()
+            }.getOrDefault(false)
+            field(
+                block, key, lctx.getString(R.string.settings_free_api_key),
+                hint = if (hasStoredKey) lctx.getString(R.string.settings_free_saved_key)
+                    else lctx.getString(R.string.settings_free_new_key),
+                secret = true,
+            )
+            rowLabel(block, lctx.getString(R.string.settings_free_model))
+            val models = FreeProviderGuard.models(id)
+            val names = when (id) {
+                FreeProviderGuard.XKIRO -> listOf("DeepSeek Free", "Qwen Free")
+                FreeProviderGuard.GROQ -> listOf("GPT-OSS 120B", "GPT-OSS 20B")
+                else -> listOf("Auto Free")
+            }
+            segmented(
+                block, "free_model_$id", models.zip(names),
+            )
+            if (id == FreeProviderGuard.XKIRO) {
+                note(block, lctx.getString(R.string.settings_free_xkiro_safety))
+            }
+            if (id == FreeProviderGuard.GROQ) {
+                note(block, lctx.getString(R.string.settings_free_groq_warning))
+                segmented(
+                    block, "free_groq_confirm",
+                    listOf("off" to lctx.getString(R.string.common_off),
+                        "on" to lctx.getString(R.string.common_on)),
+                )
+            }
+            if (id == FreeProviderGuard.OPENROUTER) {
+                note(block, lctx.getString(R.string.settings_free_openrouter_safety))
+            }
+        }
+
+        updateVisibility = { animated ->
+            for ((id, selector) in selectors) {
+                selector.setTextColor(Color.parseColor(
+                    if (id == selected) Glass.ACCENT else Glass.TITLE,
+                ))
+            }
+            Glass.setVisible(legacyBlock, selected == FreeProviderGuard.LEGACY, animated)
+            for ((id, block) in blocks) {
+                Glass.setVisible(block, selected == id, animated)
+            }
+        }
+        updateVisibility(false)
+        note(panel, lctx.getString(R.string.settings_free_scope))
     }
 
     /**
@@ -2051,6 +2166,23 @@ class SettingsUi(
         // what lets a setting actually be turned back off — VoiceConfig.save()
         // drops blank values, so a text field never could.
         for ((k, value) in stagedPicks) updates[k] = value
+        // Encrypt newly typed keys BEFORE selecting their route. A Keystore
+        // failure must not silently switch Andee to an unusable brain.
+        try {
+            for (id in listOf(
+                FreeProviderGuard.XKIRO, FreeProviderGuard.GROQ,
+                FreeProviderGuard.OPENROUTER,
+            )) {
+                stagedFields["free_key_$id"]?.trim()?.takeIf { it.isNotEmpty() }
+                    ?.let { ProviderKeyStore.put(context, id, it) }
+            }
+        } catch (_: Exception) {
+            android.widget.Toast.makeText(
+                context, lctx.getString(R.string.settings_free_key_save_error),
+                android.widget.Toast.LENGTH_LONG,
+            ).show()
+            return
+        }
         if (updates.isNotEmpty()) VoiceConfig.save(context, updates)
         hide()
     }

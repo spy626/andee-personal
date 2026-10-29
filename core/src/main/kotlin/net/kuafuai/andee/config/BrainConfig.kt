@@ -16,6 +16,8 @@ data class BrainConfig(
     val model: String,
     val thinking: Boolean,
     val reasoningEffort: String,
+    /** Optional free-provider route. Legacy Android/desktop calls remain unchanged. */
+    val freeProvider: String = "legacy",
 ) {
     /**
      * The agent loop runs on this device (local DeepSeek or CodeFlying
@@ -33,7 +35,8 @@ data class BrainConfig(
      * is what discards the conversation.
      */
     fun sameBackend(other: BrainConfig): Boolean =
-        mode == other.mode && apiKey == other.apiKey && baseUrl == other.baseUrl
+        mode == other.mode && apiKey == other.apiKey &&
+            baseUrl == other.baseUrl && freeProvider == other.freeProvider
 
     companion object {
         const val BRAIN_HUB = "hub"
