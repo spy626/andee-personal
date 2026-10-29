@@ -99,7 +99,7 @@ for required in (
     'fun quotaProblem(raw: String): String?',
     'get("$XKIRO_BASE/models", false)',
     'get("$XKIRO_BASE/usage", true)',
-    'throw IOException("xKiro remaining free-token quota unverified; no inference sent")',
+    'throw IOException("xKiro free quota blocked ($quotaIssue); no inference sent")',
 ):
     assert required in guard, f"Missing free-only enforcement: {required}"
 
