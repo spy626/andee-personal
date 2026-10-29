@@ -906,4 +906,17 @@
     <string name="settings_nav_advanced">高级与诊断</string>
     <string name="settings_nav_advanced_note">云端、键盘、诊断与恢复出厂设置</string>
     <string name="settings_nav_back">返回设置</string>
+    <string name="settings_free_provider_heading">AI 服务商</string>
+    <string name="settings_free_provider_note">选择免费 AI 服务。原有 CodeFlying 和自定义 API 均保留。</string>
+    <string name="settings_free_legacy">原有 / 自定义 API</string>
+    <string name="settings_free_api_key">服务商 API 密钥</string>
+    <string name="settings_free_key_note">密钥加密保存在本机。仅在添加或替换密钥时输入。</string>
+    <string name="settings_free_saved_key">已安全保存密钥；留空则保持不变</string>
+    <string name="settings_free_new_key">粘贴您的免费 API 密钥</string>
+    <string name="settings_free_model">模型（仅免费）</string>
+    <string name="settings_free_xkiro_safety">DeepSeek 通过 xKiro 使用，不是直接付费接口。每次请求前核查零价格、工具支持和剩余免费额度；无法确认则阻止发送。</string>
+    <string name="settings_free_groq_warning">Groq 仅适用于您确认处于免费方案的账户。若已确认免费，请打开下方开关；付费账户的费用不能由 API 自动排除。</string>
+    <string name="settings_free_openrouter_safety">仅自动免费模型。请求另设零价格上限；禁止付费回退。</string>
+    <string name="settings_free_scope">服务商选择不改变安迪的角色、自主工作、工具或语音。LLM7 和 Z.AI 尚需验证工具兼容与免费方案。</string>
+    <string name="settings_free_key_save_error">密钥加密保存失败。没有更改 AI 服务商。</string>
 </resources>
