@@ -28,6 +28,16 @@ allow = {
     "tools/verify_feature_preservation.py",
     ".github/workflows/build.yml",
     "docs/PHASE10B2_XKIRO_CATALOG_FIX.md",
+    # Phase 10B.3: xKiro free-only Auto routing and migration.
+    "tools/check_xkiro_auto_scope.py",
+    "docs/PHASE10B3_XKIRO_AUTO_FREE.md",
+    # Reviewed Phase 10B.3 production routing is byte-scoped separately.
+    "app/src/main/java/net/kuafuai/andee/config/VoiceConfig.kt",
+    "app/src/main/java/net/kuafuai/andee/ui/SettingsUi.kt",
+    "app/src/main/res/values/strings.xml",
+    "app/src/main/res/values-en/strings.xml",
+    "app/src/androidTest/java/net/kuafuai/andee/acceptance/FreeProviderKeysTest.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/brain/LlmClient.kt",
 }
 changed = set(git("diff", "--name-only", BASE, "HEAD").splitlines())
 assert changed <= allow, f"Unexpected scope: {sorted(changed - allow)}"
@@ -35,16 +45,16 @@ assert not git("diff", "--diff-filter=D", "--name-only", BASE, "HEAD"), "Deleted
 
 for path in (
     "app/src/main/java/net/kuafuai/andee/BodyCoreService.kt",
-    "app/src/main/java/net/kuafuai/andee/config/VoiceConfig.kt",
+
     "app/src/main/java/net/kuafuai/andee/config/ProviderKeyStore.kt",
-    "app/src/main/java/net/kuafuai/andee/ui/SettingsUi.kt",
+
     "app/src/main/java/net/kuafuai/andee/config/FactoryReset.kt",
     "app/src/main/java/net/kuafuai/andee/config/Vault.kt",
     "app/src/main/java/net/kuafuai/andee/config/VaultBioGate.kt",
     "app/src/main/java/net/kuafuai/andee/net/CommandDispatcher.kt",
     "app/src/main/java/net/kuafuai/andee/device/DeviceCommsController.kt",
     "app/src/main/java/net/kuafuai/andee/screen/ScreenController.kt",
-    "core/src/main/kotlin/net/kuafuai/andee/brain/LlmClient.kt",
+
     "core/src/main/kotlin/net/kuafuai/andee/brain/LocalBrain.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/SelfWork.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/Heartbeat.kt",
@@ -78,8 +88,10 @@ for marker in (
     assert marker in guard, f"Missing xKiro free safety check: {marker}"
 assert "fun catalogIsVerifiedFree(raw: String, model: String): Boolean =" in guard
 assert "catalogProblem(raw, model) == null" in guard
-assert guard.index("val problem = catalogProblem(") < guard.index('get("$XKIRO_BASE/usage", true)'), "Model must be verified before authenticated usage"
-assert "POST" not in guard.split("fun preflightXKiro")[1], "Preflight should never POST"
+# Scope the old manual preflight order specifically; Auto has its own GET-only audit.
+manual = guard[guard.index("fun preflightXKiro("):]
+assert manual.index("val problem = catalogProblem(") < manual.index('get("$XKIRO_BASE/usage", true)'), "Manual model must be verified before authenticated usage"
+assert ".post(" not in guard, "xKiro preflights must never POST"
 
 tests = source("core/src/test/kotlin/net/kuafuai/andee/brain/FreeProviderGuardTest.kt")
 for token in (

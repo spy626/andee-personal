@@ -833,7 +833,7 @@
     <string name="settings_free_saved_key">Key saved securely — leave blank to keep it</string>
     <string name="settings_free_new_key">Paste your personal free API key</string>
     <string name="settings_free_model">Model (free only)</string>
-    <string name="settings_free_xkiro_safety">DeepSeek here is through xKiro, not Direct DeepSeek. The app checks live zero pricing, tool support and remaining free tokens before each request. Unknown means blocked.</string>
+    <string name="settings_free_xkiro_safety">Auto Free chooses from the xKiro live verified $0 tool-capable models. Qwen is preferred; only definite 404/429 failures may switch within xKiro. DeepSeek and paid models are excluded. Free quota is checked before every request.</string>
     <string name="settings_free_groq_warning">Groq is only for an account you have confirmed is on the Free plan. Turn on below only if your account is free; the API cannot independently guarantee no charges on a paid Groq account.</string>
     <string name="settings_free_openrouter_safety">Auto Free only. Requests also set a zero-price ceiling; no paid fallback.</string>
     <string name="settings_free_scope">Provider selection does not change Andee’s character, autonomous work, tools, or voice engine. LLM7 and Z.AI need additional tool/free-tier verification before enabling.</string>

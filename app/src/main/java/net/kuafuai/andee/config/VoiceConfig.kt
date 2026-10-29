@@ -405,8 +405,12 @@ object VoiceConfig {
                     FreeProviderGuard.OPENROUTER,
                 )) {
                 val models = FreeProviderGuard.models(freeProvider)
-                val chosen = p.getString("free_model_$freeProvider", models.first())
+                val requested = p.getString("free_model_$freeProvider", models.first())
                     .orEmpty().ifEmpty { models.first() }
+                // Old Phase 10B.2 installs may have the unavailable DeepSeek
+                // free ID saved. Migrate its *effective* choice safely to
+                // Auto; no direct/paid DeepSeek inference and no prefs wipe.
+                val chosen = requested.takeIf { it in models } ?: models.first()
                 val acknowledged = freeProvider != FreeProviderGuard.GROQ ||
                     p.getString("free_groq_confirm", "off") == "on"
                 val credential = if (acknowledged) {
@@ -752,8 +756,9 @@ object VoiceConfig {
                 // English one) could never be seen.
                 "free_provider" to p.getString("free_provider", FreeProviderGuard.LEGACY)
                     .orEmpty().ifBlank { FreeProviderGuard.LEGACY },
-                "free_model_xkiro" to p.getString("free_model_xkiro", FreeProviderGuard.XKIRO_DEEPSEEK)
-                    .orEmpty().ifBlank { FreeProviderGuard.XKIRO_DEEPSEEK },
+                "free_model_xkiro" to p.getString("free_model_xkiro", FreeProviderGuard.XKIRO_AUTO)
+                    .orEmpty().takeIf { it in FreeProviderGuard.models(FreeProviderGuard.XKIRO) }
+                    .orEmpty().ifEmpty { FreeProviderGuard.XKIRO_AUTO },
                 "free_model_groq" to p.getString("free_model_groq", FreeProviderGuard.GROQ_120B)
                     .orEmpty().ifBlank { FreeProviderGuard.GROQ_120B },
                 "free_model_openrouter" to p.getString("free_model_openrouter", FreeProviderGuard.OPENROUTER_AUTO)

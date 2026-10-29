@@ -46,6 +46,7 @@ class FreeProviderKeysTest {
         }
     }
 
+    /** Old manually selected DeepSeek must resolve to safe Auto, never paid. */
     @Test fun selectedFreeProviderUsesOriginalLocalBrainAndExactEndpoint() {
         val app = InstrumentationRegistry.getInstrumentation().targetContext
         val p = app.getSharedPreferences("voice_prefs", 0)
@@ -64,7 +65,8 @@ class FreeProviderKeysTest {
             assertEquals(VoiceConfig.BRAIN_LOCAL, cfg.mode)
             assertEquals(FreeProviderGuard.XKIRO, cfg.freeProvider)
             assertEquals(FreeProviderGuard.XKIRO_BASE, cfg.baseUrl)
-            assertEquals(FreeProviderGuard.XKIRO_DEEPSEEK, cfg.model)
+            assertEquals(FreeProviderGuard.XKIRO_AUTO, cfg.model)
+            assertEquals(FreeProviderGuard.XKIRO_AUTO, VoiceConfig.current(app)["free_model_xkiro"])
         } finally {
             p.edit().apply {
                 for ((k,v) in old) if (v == null) remove(k) else putString(k,v)
