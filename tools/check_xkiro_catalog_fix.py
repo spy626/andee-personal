@@ -31,6 +31,12 @@ allow = {
     # Phase 10B.3: xKiro free-only Auto routing and migration.
     "tools/check_xkiro_auto_scope.py",
     "docs/PHASE10B3_XKIRO_AUTO_FREE.md",
+    # Phase 10B.4: system Back on visible full card; exact-scope checker active.
+    "app/src/androidTest/java/net/kuafuai/andee/acceptance/AndroidBackNavigationTest.kt",
+    "tools/check_android_back_scope.py",
+    "docs/PHASE10B4_ANDROID_BACK.md",
+    "app/src/main/java/net/kuafuai/andee/ui/FloatingWindowUi.kt",
+    "app/src/main/java/net/kuafuai/andee/BodyCoreService.kt",
     # Reviewed Phase 10B.3 production routing is byte-scoped separately.
     "app/src/main/java/net/kuafuai/andee/config/VoiceConfig.kt",
     "app/src/main/java/net/kuafuai/andee/ui/SettingsUi.kt",
@@ -44,7 +50,7 @@ assert changed <= allow, f"Unexpected scope: {sorted(changed - allow)}"
 assert not git("diff", "--diff-filter=D", "--name-only", BASE, "HEAD"), "Deleted files"
 
 for path in (
-    "app/src/main/java/net/kuafuai/andee/BodyCoreService.kt",
+
 
     "app/src/main/java/net/kuafuai/andee/config/ProviderKeyStore.kt",
 
