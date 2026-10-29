@@ -30,6 +30,22 @@ class FreeProviderKeysTest {
         assertEquals("", ProviderKeyStore.get(context, id))
     }
 
+    @Test fun providerKeyResetErasesAllFreeKeysButNotVault() {
+        val app = InstrumentationRegistry.getInstrumentation().targetContext
+        val fixture = "phase10b-reset-test-only"
+        try {
+            ProviderKeyStore.put(app, FreeProviderGuard.XKIRO, fixture)
+            ProviderKeyStore.put(app, FreeProviderGuard.GROQ, fixture)
+            ProviderKeyStore.wipe(app)
+            assertEquals("", ProviderKeyStore.get(app, FreeProviderGuard.XKIRO))
+            assertEquals("", ProviderKeyStore.get(app, FreeProviderGuard.GROQ))
+            assertFalse(app.getSharedPreferences("andee_free_provider_keys", 0).all.isNotEmpty())
+        } finally {
+            ProviderKeyStore.clear(app, FreeProviderGuard.XKIRO)
+            ProviderKeyStore.clear(app, FreeProviderGuard.GROQ)
+        }
+    }
+
     @Test fun selectedFreeProviderUsesOriginalLocalBrainAndExactEndpoint() {
         val app = InstrumentationRegistry.getInstrumentation().targetContext
         val p = app.getSharedPreferences("voice_prefs", 0)
