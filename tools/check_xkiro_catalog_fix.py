@@ -91,7 +91,7 @@ assert "catalogProblem(raw, model) == null" in guard
 # Scope the old manual preflight order specifically; Auto has its own GET-only audit.
 manual = guard[guard.index("fun preflightXKiro("):]
 assert manual.index("val problem = catalogProblem(") < manual.index('get("$XKIRO_BASE/usage", true)'), "Manual model must be verified before authenticated usage"
-assert "POST" not in guard.split("fun preflightXKiro")[1], "Preflight should never POST"
+assert ".post(" not in guard, "xKiro preflights must never POST"
 
 tests = source("core/src/test/kotlin/net/kuafuai/andee/brain/FreeProviderGuardTest.kt")
 for token in (
