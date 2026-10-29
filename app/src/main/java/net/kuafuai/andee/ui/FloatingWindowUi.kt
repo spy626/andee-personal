@@ -357,7 +357,7 @@ class FloatingWindowUi(
         unregisterApi33Back()
         val callback = android.window.OnBackInvokedCallback { minimizeOnAndroidBack() }
         dispatcher.registerOnBackInvokedCallback(
-            android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, callback,
+            android.window.OnBackInvokedDispatcher.PRIORITY_OVERLAY, callback,
         )
         backDispatcher = dispatcher
         backCallback = callback
