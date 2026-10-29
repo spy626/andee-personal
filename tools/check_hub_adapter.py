@@ -20,6 +20,9 @@ assert "await phone.send(proof)" in bridge, "proof not sent"
 assert "await self._relay(phone, legacy)" in bridge, "original Hub relay missing"
 assert bridge.index("await phone.send(proof)") < bridge.index("await self._relay(phone, legacy)"), "relay before proof"
 assert '"starting hub client → $url' not in client, "secret bearer path logged on Android"
+assert '"connect failed: ${t.message}"' not in client, "network exception may expose secret URL"
+assert '"onError ${ex?.message}"' not in client, "WebSocket error may expose secret URL"
+assert '"onClose code=$code reason=$reason' not in client, "untrusted close reason logged"
 assert "python -m unittest discover" in workflow, "CI integration tests missing"
 assert "websockets==16.0" in requirements and "cryptography==46.0.4" in requirements
 print("PASS: experimental signed Hub adapter TLS/capability/loopback controls")
