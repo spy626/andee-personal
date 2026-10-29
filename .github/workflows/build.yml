@@ -49,6 +49,7 @@ jobs:
       - run: python3 tools/check_vault_screen_lock.py
       - run: python3 tools/check_vault_settings_safe.py
       - run: python3 tools/check_settings_navigation.py
+      - run: python3 tools/check_free_provider_scope.py
 
       - uses: actions/upload-artifact@v4
         with:
@@ -74,6 +75,7 @@ jobs:
       - run: python3 tools/check_vault_screen_lock.py
       - run: python3 tools/check_vault_settings_safe.py
       - run: python3 tools/check_settings_navigation.py
+      - run: python3 tools/check_free_provider_scope.py
 
   # assembleRelease is its own job rather than a step above, because it is a
   # *gate* and not a deliverable: the APK has no signingConfig and cannot be
