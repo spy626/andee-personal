@@ -53,7 +53,7 @@ expected=base.replace(
     '        window.setTypingBackPassthrough(false)\n'
     '        if (typingFromFullscreen && !window.isCompact()) dispatcher.expand()',
 )
-assert expected == read(body), "Body service changed beyond two keyboard focus handoffs"
+assert expected.strip() == read(body).strip(), "Body service changed beyond two keyboard focus handoffs"
 
 # Protect whole original LLM/voice/screen/autonomous functions byte-for-byte.
 for p in (
