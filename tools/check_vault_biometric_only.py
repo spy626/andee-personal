@@ -46,7 +46,8 @@ for token in (
     "throw IllegalStateException",
 ):
     assert token in vault, f"Vault migration / biometric guard missing: {token}"
-assert vault.index("putString(KEY_BLOB_BIO, encrypted).commit()") < vault.index("retireLegacy(preferences)"), "old secrets removed before verified new commit"
+migration = vault[vault.index("val legacy = preferences.getString(KEY_BLOB_LEGACY"):]
+assert migration.index("putString(KEY_BLOB_BIO, encrypted).commit()") < migration.index("retireLegacy(preferences)"), "old secrets removed before verified new commit"
 assert "emptyList()" not in vault[vault.index("}.getOrElse {"):vault.index("/** Insert or replace by [Entry.id]. */")], "failed Vault read treated as empty"
 
 bio = read("app/src/main/java/net/kuafuai/andee/config/VaultBioGate.kt")
