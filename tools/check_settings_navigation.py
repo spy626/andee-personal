@@ -52,6 +52,11 @@ allowed = {
     "app/src/androidTest/java/net/kuafuai/andee/acceptance/AndroidBackNavigationTest.kt",
     "tools/check_android_back_scope.py",
     "docs/PHASE10B4_ANDROID_BACK.md",
+    # Phase 10B.5: Back overlay priority + fail-closed Groq/quota diagnostics.
+    "tools/check_phase10b5.py",
+    "docs/PHASE10B5_BACK_GROQ_QUOTA.md",
+    "app/src/main/AndroidManifest.xml",
+
     "app/src/main/java/net/kuafuai/andee/ui/FloatingWindowUi.kt",
     "app/src/main/java/net/kuafuai/andee/BodyCoreService.kt",
 }

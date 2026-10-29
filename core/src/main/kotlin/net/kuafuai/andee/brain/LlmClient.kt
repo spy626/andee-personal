@@ -182,7 +182,14 @@ class LlmClient(
             // VoiceConfig supplies no key until explicitly acknowledged.
             // Fail before constructing ANY inference request with user data.
             if (apiKey.isBlank()) {
-                throw IllegalStateException("Free provider key or approval missing; no request sent")
+                if (freeProvider == FreeProviderGuard.GROQ) {
+                    throw IllegalStateException(
+                        "Groq not ready: Free-account switch OFF or API key missing. " +
+                            "In Settings → AI & Voice → Groq Free, save your own key " +
+                            "and enable Free-account confirmation. No request sent."
+                    )
+                }
+                throw IllegalStateException("Free provider key missing; no request sent")
             }
             if (freeProvider == FreeProviderGuard.OPENROUTER) {
                 body.put("provider", JSONObject().put("max_price", JSONObject()
@@ -209,6 +216,16 @@ class LlmClient(
                 FreeProviderGuard.preflightXKiro(http, apiKey, model)
             }
             listOf(model)
+        }
+
+        // Groq GPT-OSS 20B/120B accept TEXT and tools, not image inputs.
+        // Refuse unsupported screenshots instead of leaking data to a failing
+        // call or silently removing the image needed for autonomous WORK.
+        if (freeProvider == FreeProviderGuard.GROQ && needsVision) {
+            throw IllegalStateException(
+                "Groq selected model is text-only; image/screenshot request blocked. " +
+                    "No request sent."
+            )
         }
 
         var resultText: String? = null
@@ -244,6 +261,11 @@ class LlmClient(
                         if (autoXKiro && FreeProviderGuard.autoRetryable(resp.code) &&
                             attempt < 2 && attempt < candidates.size - 1) {
                             return@use
+                        }
+                        if (freeProvider == FreeProviderGuard.GROQ) {
+                            throw IllegalStateException(
+                                "Groq HTTP ${resp.code}: " + FreeProviderGuard.groqErrorHint(resp.code)
+                            )
                         }
                         throw LlmHttpException(resp.code, raw)
                     }

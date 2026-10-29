@@ -46,6 +46,11 @@ allowed = {
     "app/src/androidTest/java/net/kuafuai/andee/acceptance/AndroidBackNavigationTest.kt",
     "tools/check_android_back_scope.py",
     "docs/PHASE10B4_ANDROID_BACK.md",
+    # Phase 10B.5: Back overlay priority + fail-closed Groq/quota diagnostics.
+    "tools/check_phase10b5.py",
+    "docs/PHASE10B5_BACK_GROQ_QUOTA.md",
+    "app/src/main/AndroidManifest.xml",
+
     "app/src/main/java/net/kuafuai/andee/ui/FloatingWindowUi.kt",
     "app/src/main/java/net/kuafuai/andee/BodyCoreService.kt",
     ".github/workflows/build.yml",
@@ -91,10 +96,10 @@ for required in (
     '"access_tier") != "free"', '"tools") != true',
     'p.has("input")', 'p.has("output")',
     'if (amount.compareTo(BigDecimal.ZERO) != 0)',
-    'obj.optLong("remaining", -1L) >= 12_000L',
+    'fun quotaProblem(raw: String): String?',
     'get("$XKIRO_BASE/models", false)',
     'get("$XKIRO_BASE/usage", true)',
-    'throw IOException("xKiro remaining free-token quota unverified; no inference sent")',
+    'throw IOException("xKiro free quota blocked ($quotaIssue); no inference sent")',
 ):
     assert required in guard, f"Missing free-only enforcement: {required}"
 

@@ -35,6 +35,11 @@ allowed = {
     "app/src/androidTest/java/net/kuafuai/andee/acceptance/AndroidBackNavigationTest.kt",
     "tools/check_android_back_scope.py",
     "docs/PHASE10B4_ANDROID_BACK.md",
+    # Phase 10B.5: Back overlay priority + fail-closed Groq/quota diagnostics.
+    "tools/check_phase10b5.py",
+    "docs/PHASE10B5_BACK_GROQ_QUOTA.md",
+    "app/src/main/AndroidManifest.xml",
+
     "app/src/main/java/net/kuafuai/andee/ui/FloatingWindowUi.kt",
     "app/src/main/java/net/kuafuai/andee/BodyCoreService.kt",
 }
@@ -74,7 +79,7 @@ for tok in (
     'item.optJSONObject("capabilities")?.optBoolean("tools") != true',
     'item.optJSONObject("capabilities")?.optBoolean("vision") != true',
     'if (amount.compareTo(BigDecimal.ZERO) != 0)',
-    'if (!quotaIsVerifiedFree(get("$XKIRO_BASE/usage", true)))',
+    'val quotaIssue = quotaProblem(get("$XKIRO_BASE/usage", true))',
     'fun autoEligibleModels(raw: String, needsVision: Boolean = false): List<String>',
     'fun preflightXKiroAuto(',
     'fun autoRetryable(status: Int): Boolean = status == 404 || status == 429',

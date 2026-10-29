@@ -22,6 +22,17 @@ allowed={
     "app/src/androidTest/java/net/kuafuai/andee/acceptance/AndroidBackNavigationTest.kt",
     ".github/workflows/build.yml",
     "docs/PHASE10B4_ANDROID_BACK.md",
+    # Phase 10B.5: Back overlay priority + fail-closed Groq/quota diagnostics.
+    "tools/check_phase10b5.py",
+    "docs/PHASE10B5_BACK_GROQ_QUOTA.md",
+    "core/src/test/kotlin/net/kuafuai/andee/brain/FreeProviderGuardTest.kt",
+
+    "core/src/main/kotlin/net/kuafuai/andee/brain/FreeProviderGuard.kt",
+
+    "core/src/main/kotlin/net/kuafuai/andee/brain/LlmClient.kt",
+
+    "app/src/main/AndroidManifest.xml",
+
     "tools/check_android_back_scope.py",
     "tools/verify_feature_preservation.py",
     "tools/check_vault_biometric_only.py",
@@ -67,8 +78,6 @@ for p in (
     "app/src/main/java/net/kuafuai/andee/device/DeviceCommsController.kt",
     "app/src/main/java/net/kuafuai/andee/screen/ScreenController.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/LocalBrain.kt",
-    "core/src/main/kotlin/net/kuafuai/andee/brain/LlmClient.kt",
-    "core/src/main/kotlin/net/kuafuai/andee/brain/FreeProviderGuard.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/SelfWork.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/Heartbeat.kt",
     "core/src/main/kotlin/net/kuafuai/andee/asr/GoogleAsr.kt",

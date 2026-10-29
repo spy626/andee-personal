@@ -31,6 +31,17 @@ object FreeProviderGuard {
     const val GROQ_20B = "openai/gpt-oss-20b"
     const val OPENROUTER_AUTO = "openrouter/free"
 
+    /** No server response body (which could echo prompts or secrets) in UI errors. */
+    fun groqErrorHint(status: Int): String = when (status) {
+        400 -> "request or tool format rejected; check model/tool compatibility"
+        401 -> "API key rejected; check the Groq key in Settings"
+        402, 403 -> "account/model access denied; verify free-plan eligibility"
+        404 -> "model not available for this Groq key"
+        429 -> "free plan rate/token limit reached; do not switch to paid"
+        in 500..599 -> "Groq server unavailable; no automatic retry or paid fallback"
+        else -> "request unsuccessful; no automatic paid fallback"
+    }
+
     fun models(provider: String): List<String> = when (provider) {
         XKIRO -> listOf(XKIRO_AUTO, XKIRO_QWEN)
         GROQ -> listOf(GROQ_120B, GROQ_20B)
@@ -150,8 +161,9 @@ object FreeProviderGuard {
         val eligible = autoEligibleModels(get("$XKIRO_BASE/models", false), needsVision)
         if (eligible.isEmpty())
             throw IOException("xKiro Auto no verified free tool-capable model; no inference sent")
-        if (!quotaIsVerifiedFree(get("$XKIRO_BASE/usage", true)))
-            throw IOException("xKiro Auto remaining free quota unverified; no inference sent")
+        val quotaIssue = quotaProblem(get("$XKIRO_BASE/usage", true))
+        if (quotaIssue != null)
+            throw IOException("xKiro Auto free quota blocked ($quotaIssue); no inference sent")
         return eligible
     }
 
@@ -159,12 +171,37 @@ object FreeProviderGuard {
     fun catalogIsVerifiedFree(raw: String, model: String): Boolean =
         catalogProblem(raw, model) == null
 
-    fun quotaIsVerifiedFree(raw: String): Boolean = runCatching {
-        val obj = JSONObject(raw).optJSONObject("free_tokens") ?: return@runCatching false
-        // Never interpret an unknown/null unlimited quota as permission.
-        if (!obj.has("remaining") || obj.isNull("remaining")) return@runCatching false
-        obj.optLong("remaining", -1L) >= 12_000L
-    }.getOrDefault(false)
+    /**
+     * xKiro /usage: an explicitly null limit_per_day AND null remaining means
+     * the free-token cap does not apply to this account. Other unknown or
+     * inconsistent counters are NOT unlimited and must fail closed.
+     * Paid model eligibility remains independently blocked by zero-price
+     * catalog checks before every request.
+     */
+    fun quotaProblem(raw: String): String? {
+        val root = runCatching { JSONObject(raw) }.getOrNull()
+            ?: return "invalid_usage"
+        if (root.optString("object") != "usage") return "invalid_usage"
+        val obj = root.optJSONObject("free_tokens") ?: return "free_quota_missing"
+        if (!obj.has("limit_per_day") || !obj.has("remaining") ||
+            !obj.has("used_today") || obj.isNull("used_today")) {
+            return "free_quota_missing"
+        }
+        val used = obj.optLong("used_today", -1L)
+        if (used < 0) return "free_quota_invalid"
+        if (obj.isNull("limit_per_day")) {
+            return if (obj.isNull("remaining")) null else "free_quota_inconsistent"
+        }
+        if (obj.isNull("remaining")) return "free_quota_inconsistent"
+        val limit = obj.optLong("limit_per_day", -1L)
+        val remaining = obj.optLong("remaining", -1L)
+        if (limit < 0 || remaining < 0 || remaining > limit) return "free_quota_invalid"
+        if (remaining == 0L) return "free_quota_exhausted"
+        return null
+    }
+
+    /** Pure, offline-testable parser: no account details are logged. */
+    fun quotaIsVerifiedFree(raw: String): Boolean = quotaProblem(raw) == null
 
     /** Two GET-only checks; no POST and no arbitrary redirect on failed checks. */
     fun preflightXKiro(http: OkHttpClient, apiKey: String, model: String) {
@@ -184,7 +221,8 @@ object FreeProviderGuard {
         if (problem != null) {
             throw IOException("xKiro preflight blocked ($problem): select a verified free model in Settings; no inference sent")
         }
-        if (!quotaIsVerifiedFree(get("$XKIRO_BASE/usage", true)))
-            throw IOException("xKiro remaining free-token quota unverified; no inference sent")
+        val quotaIssue = quotaProblem(get("$XKIRO_BASE/usage", true))
+        if (quotaIssue != null)
+            throw IOException("xKiro free quota blocked ($quotaIssue); no inference sent")
     }
 }
