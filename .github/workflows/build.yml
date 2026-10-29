@@ -71,3 +71,16 @@ jobs:
       - uses: gradle/actions/setup-gradle@v3
 
       - run: ./gradlew --no-daemon :app:assembleRelease
+
+  # Tests an actual TLS WebSocket adapter and fake legacy Hub, on host only.
+  # This job never connects to an Android device, SMS, WhatsApp or a real Hub.
+  signed-hub-adapter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r tools/requirements-hub-adapter.txt
+      - run: python -m unittest discover -s tools/tests -p 'test_hub_signed_adapter.py' -v
+      - run: python tools/check_hub_adapter.py

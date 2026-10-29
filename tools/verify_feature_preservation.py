@@ -40,6 +40,12 @@ ALLOWED_CHANGES = {
     "core/src/test/kotlin/net/kuafuai/andee/net/HubIdentityTest.kt",
     "tools/check_signed_hub_identity.py",
     "docs/HUB_SIGNED_IDENTITY_PROTOCOL.md",
+    # Free, opt-in external bridge + TLS/mocked-backend tests; no Android UX edits.
+    "docs/HUB_ADAPTER_RUNBOOK.md",
+    "tools/hub_signed_adapter.py",
+    "tools/tests/test_hub_signed_adapter.py",
+    "tools/requirements-hub-adapter.txt",
+    "tools/check_hub_adapter.py",
     "SECURITY.md",  # Written disclosure of known risks, not runtime code.
 }
 

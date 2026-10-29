@@ -85,7 +85,9 @@ class BodyWsClient(
             return
         }
         if (!running.compareAndSet(false, true)) return
-        Log.i(TAG, "starting hub client → $url  (device=$deviceId '$deviceName')")
+        // The Hub URL can contain a high-entropy access capability in its path.
+        // Never write that URL or path to Android logs.
+        Log.i(TAG, "starting authenticated remote Hub client (device=$deviceId)")
         scheduleConnect(0)
     }
 

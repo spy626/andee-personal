@@ -1,7 +1,7 @@
 # Andee Remote Hub: signed identity v1 (draft interoperability contract)
 
 This protocol is **required** by `recovery/phase3-signed-hub-identity` for the
-optional remote Hub backend. **No remote Hub adapter ships in this fork.**
+optional remote Hub backend. **A free, opt-in experimental signed Hub adapter now exists in `tools/hub_signed_adapter.py` (Phase 4); it is not deployed or main-phone certified.**
 The existing local/on-device AI, notifications, messaging, voice and overlay
 continue without remote Hub configuration.
 
@@ -71,9 +71,23 @@ printf 'andee-hub-auth-v1\n%s\n%s' "$DEVICE_ID" "$NONCE" |
 - This proves possession of a trusted signing key. It does not protect against
   a malicious/compromised **authenticated** Hub, provider prompt injection,
   owner account compromise, or a user pinning the wrong public key.
-- Remote Hub servers **must be updated** to sign challenges. Until then, the
+- Remote Hub servers **must be updated** to sign challenges or used behind the separately supplied, self-hosted experimental bridge. Until then, the
   optional remote Hub backend is intentionally unavailable; do not mark its
   feature parity as passing.
 - Do not enable phone-level Accessibility/SMS/notifications on the user's
   main device until remote integration, per-action authorization and complete
   real-device acceptance have all passed.
+
+## Optional self-hosted legacy Hub compatibility bridge
+
+The Phase 4 draft supplies `tools/hub_signed_adapter.py`. It verifies a
+32-byte random bearer access path at WebSocket upgrade, listens via TLS,
+validates the phone's signed-challenge request, signs it with the Hub's P-256
+private key, then transparently relays original WebSocket frames to an
+**existing legacy Hub on the same computer's loopback interface**.
+
+See `docs/HUB_ADAPTER_RUNBOOK.md` for operation and security boundaries.
+This code is not a remote Hub AI implementation, public service or
+cryptographic mutual pairing system. It has no real Android/WhatsApp/SMS
+acceptance certification and must **not** be deployed to the owner's main
+phone yet.
