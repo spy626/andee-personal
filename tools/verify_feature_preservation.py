@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed source preservation audit against original personal Andee baseline.
+"""Fail-closed source preservation audit against exact upstream Andee v0.8.0 baseline.
 
 This proves unmodified source-file identity, NOT that an Android device works.
 When a feature legitimately changes, update the contract with new behavior tests;
@@ -9,7 +9,7 @@ import re
 import subprocess
 from pathlib import Path
 
-BASE = "03189e0c643fe2c2799fa96e3afb9b369e95c8ed"
+BASE = "df667e69a342d462ff0bb4593a73d84a9509d059"
 ROOT = Path(__file__).resolve().parents[1]
 
 # Only tests/docs/build-tool compatibility changed on this audit branch.
@@ -21,6 +21,8 @@ ALLOWED_CHANGES = {
     "docs/FEATURE_PRESERVATION_RECOVERY.md",
     "docs/FEATURE_PARITY_AUDIT.md",
     "tools/verify_feature_preservation.py",
+    "tools/check_v080_feature_integration.py",
+    "docs/PHASE8_V080_INTEGRATION.md",
     # Explicitly scoped transport fixes. Existing UI/messaging/tool
     # dispatch/voice/rendering source must remain byte-for-byte identical.
     "app/src/main/java/net/kuafuai/andee/BodyCoreService.kt",
@@ -164,12 +166,12 @@ for path, tokens in MUST_CONTAIN.items():
 # Original untouched code can contain unsafe operations or incomplete flows:
 # do not mislabel this file-identity check as security or end-to-end UX proof.
 preserved = len(base) - len([p for p in base if p in ALLOWED_CHANGES])
-# Thirteen original files may differ: the Phase 6 reviewed eleven, plus
-# dispatcher and live foreground observation added in Phase 7.
-# All other 422 baseline blobs remain byte-for-byte equal.
-assert len(base) == 435, f"Original baseline inventory unexpectedly changed: {len(base)}"
-assert preserved >= 422, f"Original feature preservation threshold failed: {preserved}"
-print(f"PASS: {preserved}/{len(base)} original Git blobs byte-for-byte unchanged;"
+# The reviewed security paths may differ; all other v0.8.0 source and assets
+# must remain exactly the same as the original release.
+assert len(base) == 474, f"Upstream v0.8.0 baseline inventory unexpectedly changed: {len(base)}"
+assert preserved >= 474-14, f"v0.8.0 feature preservation threshold failed: {preserved}"
+unchanged = sum(base[p] == head[p] for p in base)
+print(f"PASS: {unchanged}/{len(base)} upstream v0.8.0 Git blobs byte-for-byte unchanged;"
       f" no deleted source and {len(MUST_CONTAIN)} feature paths with core entry points")
 print("LIMITATION: WhatsApp/SMS draft, approval, sending and Android animation"
       " still require behavioral integration and physical device tests.")
