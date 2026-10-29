@@ -79,7 +79,6 @@ for path in (
     "app/src/main/java/net/kuafuai/andee/net/CommandDispatcher.kt",
     "app/src/main/java/net/kuafuai/andee/device/DeviceCommsController.kt",
     "app/src/main/java/net/kuafuai/andee/device/NotificationRelayService.kt",
-    "core/src/main/kotlin/net/kuafuai/andee/brain/LocalBrain.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/SelfWork.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/Heartbeat.kt",
     "app/src/main/java/net/kuafuai/andee/screen/ScreenController.kt",
