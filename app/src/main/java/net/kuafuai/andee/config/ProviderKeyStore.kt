@@ -80,6 +80,16 @@ object ProviderKeyStore {
         }
     }
 
+    /** Included in the original Factory Reset "keys" target. */
+    @Synchronized
+    fun wipe(context: Context) {
+        // This alias is exclusive to free-provider keys, never the biometric Vault.
+        val ks = KeyStore.getInstance(KEYSTORE).apply { load(null) }
+        if (ks.containsAlias(KEY_ALIAS)) ks.deleteEntry(KEY_ALIAS)
+        check(context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+            .edit().clear().commit()) { "Provider keys were not cleared" }
+    }
+
     @Synchronized
     fun clear(context: Context, provider: String) {
         require(provider in supported)
