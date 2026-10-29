@@ -53,6 +53,12 @@ allowed = {
     # Phase 10B.3: xKiro free-only Auto routing and migration.
     "tools/check_xkiro_auto_scope.py",
     "docs/PHASE10B3_XKIRO_AUTO_FREE.md",
+    # Phase 10B.4: system Back on visible full card; exact-scope checker active.
+    "app/src/androidTest/java/net/kuafuai/andee/acceptance/AndroidBackNavigationTest.kt",
+    "tools/check_android_back_scope.py",
+    "docs/PHASE10B4_ANDROID_BACK.md",
+    "app/src/main/java/net/kuafuai/andee/ui/FloatingWindowUi.kt",
+    "app/src/main/java/net/kuafuai/andee/BodyCoreService.kt",
     ".github/workflows/build.yml",
 }
 changed = set(git("diff", "--name-only", BASE, "HEAD").splitlines())
@@ -103,7 +109,7 @@ for path in (
     "core/src/main/kotlin/net/kuafuai/andee/brain/SelfWork.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/Heartbeat.kt",
     "app/src/main/java/net/kuafuai/andee/screen/ScreenController.kt",
-    "app/src/main/java/net/kuafuai/andee/BodyCoreService.kt",
+
 ):
     assert git("rev-parse", f"{BASE}:{path}") == git("rev-parse", f"HEAD:{path}"), f"Unrelated feature source changed: {path}"
 
