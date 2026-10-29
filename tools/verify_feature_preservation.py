@@ -58,6 +58,9 @@ ALLOWED_CHANGES = {
     "app/src/androidTest/java/net/kuafuai/andee/acceptance/FreeProviderKeysTest.kt",
     "tools/check_free_provider_scope.py",
     "docs/PHASE10B1_FREE_PROVIDERS.md",
+    # Phase 10B.2: xKiro free catalog diagnostics and documented ID only.
+    "tools/check_xkiro_catalog_fix.py",
+    "docs/PHASE10B2_XKIRO_CATALOG_FIX.md",
     "docs/PHASE8_V080_INTEGRATION.md",
     # Explicitly scoped transport fixes. Existing UI/messaging/tool
     # dispatch/voice/rendering source must remain byte-for-byte identical.

@@ -24,7 +24,7 @@ object FreeProviderGuard {
     const val OPENROUTER_BASE = "https://openrouter.ai/api/v1"
 
     const val XKIRO_DEEPSEEK = "deepseek/deepseek-v4.1-flash:free"
-    const val XKIRO_QWEN = "qwen/qwen3-coder-plus:free"
+    const val XKIRO_QWEN = "qwen/qwen3-vl-plus:free"
     const val GROQ_120B = "openai/gpt-oss-120b"
     const val GROQ_20B = "openai/gpt-oss-20b"
     const val OPENROUTER_AUTO = "openrouter/free"
@@ -51,29 +51,41 @@ object FreeProviderGuard {
         }
     }
 
-    /** Pure parser, covered by tests with paid, free and malformed catalog fixtures. */
-    fun catalogIsVerifiedFree(raw: String, model: String): Boolean = runCatching {
-        if (model !in models(XKIRO)) return@runCatching false
-        val arr = JSONObject(raw).optJSONArray("data") ?: return@runCatching false
+    /**
+     * A safe, actionable reason for rejecting a model. Never include a raw
+     * response, user message, key, pricing numbers, or account details.
+     * A missing free model ID is different from a paid model: neither is sent.
+     */
+    fun catalogProblem(raw: String, model: String): String? {
+        if (model !in models(XKIRO)) return "unsupported_model"
+        val root = runCatching { JSONObject(raw) }.getOrNull()
+            ?: return "invalid_catalog"
+        val arr = root.optJSONArray("data") ?: return "invalid_catalog"
         val item = (0 until arr.length()).mapNotNull { arr.optJSONObject(it) }
-            .firstOrNull { it.optString("id") == model } ?: return@runCatching false
-        if (item.optString("access_tier") != "free") return@runCatching false
-        // Andee uses OpenAI-compatible tool calling throughout autonomous WORK.
+            .firstOrNull { it.optString("id") == model }
+            ?: return "model_not_listed"
+        if (item.optString("access_tier") != "free") return "not_free_tier"
+        // Original Andee autonomy requires tools. Text-only routes are unsafe.
         if (item.optJSONObject("capabilities")?.optBoolean("tools") != true)
-            return@runCatching false
-        val p = item.optJSONObject("pricing") ?: return@runCatching false
-        if (!p.has("input") || !p.has("output")) return@runCatching false
-        // All numeric tariff components must be explicitly zero. If xKiro adds
-        // a new charge field, this logic fails closed rather than guessing.
+            return "tools_not_verified"
+        val p = item.optJSONObject("pricing") ?: return "pricing_missing"
+        if (!p.has("input") || !p.has("output")) return "pricing_missing"
+        // Fail closed for every unrecognised or nonzero tariff component.
+        // All price fields must be explicit numeric zero (USD metadata ignored).
         val keys = p.keys()
         while (keys.hasNext()) {
             val key = keys.next()
             if (key in setOf("currency", "unit")) continue
-            val amount = p.opt(key)?.toString()?.toBigDecimalOrNull() ?: return@runCatching false
-            if (amount.compareTo(BigDecimal.ZERO) != 0) return@runCatching false
+            val amount = p.opt(key)?.toString()?.toBigDecimalOrNull()
+                ?: return "pricing_unverified"
+            if (amount.compareTo(BigDecimal.ZERO) != 0) return "nonzero_price"
         }
-        true
-    }.getOrDefault(false)
+        return null
+    }
+
+    /** Pure Boolean wrapper kept for Phase 10B.1 callers/tests. */
+    fun catalogIsVerifiedFree(raw: String, model: String): Boolean =
+        catalogProblem(raw, model) == null
 
     fun quotaIsVerifiedFree(raw: String): Boolean = runCatching {
         val obj = JSONObject(raw).optJSONObject("free_tokens") ?: return@runCatching false
@@ -96,8 +108,10 @@ object FreeProviderGuard {
                     ?: throw IOException("xKiro preflight body missing; no inference sent")
             }
         }
-        if (!catalogIsVerifiedFree(get("$XKIRO_BASE/models", false), model))
-            throw IOException("xKiro model price/tier/tool support unverified; no inference sent")
+        val problem = catalogProblem(get("$XKIRO_BASE/models", false), model)
+        if (problem != null) {
+            throw IOException("xKiro preflight blocked ($problem): select a verified free model in Settings; no inference sent")
+        }
         if (!quotaIsVerifiedFree(get("$XKIRO_BASE/usage", true)))
             throw IOException("xKiro remaining free-token quota unverified; no inference sent")
     }
