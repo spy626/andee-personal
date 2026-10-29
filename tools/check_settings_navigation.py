@@ -34,6 +34,7 @@ allowed = {
     "app/src/main/java/net/kuafuai/andee/config/ProviderKeyStore.kt",
     "core/src/main/kotlin/net/kuafuai/andee/config/BrainConfig.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/LlmClient.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/brain/LocalBrain.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/FreeProviderGuard.kt",
     "core/src/test/kotlin/net/kuafuai/andee/brain/FreeProviderGuardTest.kt",
     "app/src/androidTest/java/net/kuafuai/andee/acceptance/FreeProviderKeysTest.kt",
