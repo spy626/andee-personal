@@ -41,6 +41,7 @@ jobs:
       - run: python3 tools/check_network_transport.py
       - run: python3 tools/check_local_connection_consent.py
       - run: python3 tools/check_signed_hub_identity.py
+      - run: python3 tools/check_original_feature_contracts.py
 
       - uses: actions/upload-artifact@v4
         with:
@@ -84,3 +85,37 @@ jobs:
       - run: python -m pip install -r tools/requirements-hub-adapter.txt
       - run: python -m unittest discover -s tools/tests -p 'test_hub_signed_adapter.py' -v
       - run: python tools/check_hub_adapter.py
+
+  # Disposable Android emulator smoke tests; no SMS/WhatsApp messages sent,
+  # no notification/accessibility permissions granted or user API keys present.
+  # This is NOT real-phone acceptance or a production safety sign-off.
+  android-emulator-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v3
+
+      - name: Enable KVM for local emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Execute isolated Android 11 acceptance smoke tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          profile: pixel_3a
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: ./gradlew --no-daemon :app:connectedDebugAndroidTest
+
