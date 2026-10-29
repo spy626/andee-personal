@@ -38,6 +38,7 @@ allowed = {
     # Phase 10B.1: explicit free provider/zero-cost guard and encrypted keys only.
     "app/src/main/java/net/kuafuai/andee/config/VoiceConfig.kt",
     "app/src/main/java/net/kuafuai/andee/config/ProviderKeyStore.kt",
+    "app/src/main/java/net/kuafuai/andee/config/FactoryReset.kt",
     "core/src/main/kotlin/net/kuafuai/andee/config/BrainConfig.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/LlmClient.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/LocalBrain.kt",
