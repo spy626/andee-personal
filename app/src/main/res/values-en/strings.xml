@@ -814,4 +814,15 @@
     <string name="window_input_hint">Type to it…</string>
     <string name="window_voice_on">Voice on</string>
     <string name="window_muted">Muted</string>
+    <string name="settings_nav_ai_voice">AI &amp; Voice</string>
+    <string name="settings_nav_ai_voice_note">Existing AI backend, API keys and voice providers</string>
+    <string name="settings_nav_appearance">Appearance &amp; Wake</string>
+    <string name="settings_nav_appearance_note">Theme, character expression and wake word</string>
+    <string name="settings_nav_memory">Memory &amp; Autonomy</string>
+    <string name="settings_nav_memory_note">Notebook, notifications and independent work</string>
+    <string name="settings_nav_device">Vault &amp; Tools</string>
+    <string name="settings_nav_device_note">Biometric Vault and original installed-app tools</string>
+    <string name="settings_nav_advanced">Advanced &amp; Diagnostics</string>
+    <string name="settings_nav_advanced_note">Hub, keyboard, security checks and reset</string>
+    <string name="settings_nav_back">Back to Settings</string>
 </resources>
