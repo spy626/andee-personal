@@ -31,13 +31,19 @@ allowed = {
     "tools/verify_feature_preservation.py",
     ".github/workflows/build.yml",
     "docs/PHASE10B3_XKIRO_AUTO_FREE.md",
+    # Phase 10B.4: system Back on visible full card; exact-scope checker active.
+    "app/src/androidTest/java/net/kuafuai/andee/acceptance/AndroidBackNavigationTest.kt",
+    "tools/check_android_back_scope.py",
+    "docs/PHASE10B4_ANDROID_BACK.md",
+    "app/src/main/java/net/kuafuai/andee/ui/FloatingWindowUi.kt",
+    "app/src/main/java/net/kuafuai/andee/BodyCoreService.kt",
 }
 actual = set(git("diff", "--name-only", BASE, "HEAD").splitlines())
 assert actual <= allowed, f"Phase 10B.3 edited out-of-scope files: {sorted(actual - allowed)}"
 assert not git("diff", "--diff-filter=D", "--name-only", BASE, "HEAD"), "Removed source files"
 
 for path in (
-    "app/src/main/java/net/kuafuai/andee/BodyCoreService.kt",
+
     "app/src/main/java/net/kuafuai/andee/config/Vault.kt",
     "app/src/main/java/net/kuafuai/andee/config/VaultBioGate.kt",
     "app/src/main/java/net/kuafuai/andee/config/ProviderKeyStore.kt",
@@ -46,7 +52,7 @@ for path in (
     "app/src/main/java/net/kuafuai/andee/device/DeviceCommsController.kt",
     "app/src/main/java/net/kuafuai/andee/device/NotificationRelayService.kt",
     "app/src/main/java/net/kuafuai/andee/screen/ScreenController.kt",
-    "app/src/main/java/net/kuafuai/andee/ui/FloatingWindowUi.kt",
+
     "app/src/main/java/net/kuafuai/andee/ui/ball/EmotionBallTextureView.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/LocalBrain.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/SelfWork.kt",
