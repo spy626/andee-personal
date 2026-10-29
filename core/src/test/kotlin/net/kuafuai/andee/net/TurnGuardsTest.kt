@@ -58,6 +58,67 @@ class TurnGuardsTest {
     }
 
     @Test
+    fun `untrusted gestures stay scoped to live WhatsApp and WeChat windows`() {
+        val gestures = listOf(
+            "screen.tap", "screen.tap_target", "screen.tap_id",
+            "screen.swipe", "screen.long_press", "screen.long_press_id",
+            "screen.type", "screen.submit_input",
+        )
+        for (method in gestures) {
+            TurnGuards.checkUntrustedScreen(method, "com.whatsapp")
+            TurnGuards.checkUntrustedScreen(method, "com.whatsapp.w4b")
+            TurnGuards.checkUntrustedScreen(method, "com.tencent.mm")
+            for (pkg in listOf(null, "", "com.android.settings",
+                    "com.android.chrome", "com.bank.app", "com.whatsapp.fake")) {
+                try {
+                    TurnGuards.checkUntrustedScreen(method, pkg)
+                    fail("untrusted $method accepted $pkg")
+                } catch (_: IllegalStateException) {
+                    // Correct fail closed for unknown, sensitive or stale root.
+                }
+            }
+        }
+        // Screen observations remain available for the original read/triage flow.
+        TurnGuards.checkUntrustedScreen("screen.ui_tree", null)
+        TurnGuards.checkUntrustedScreen("screen.screenshot", null)
+        TurnGuards.checkUntrustedScreen("screen.global", "com.whatsapp", "back")
+        try {
+            TurnGuards.checkUntrustedScreen("screen.global", "com.whatsapp", "quick_settings")
+            fail("untrusted quick settings navigation allowed")
+        } catch (_: IllegalStateException) {}
+    }
+
+    @Test
+    fun `untrusted app launches resolve only known messaging packages`() {
+        assertEquals("com.whatsapp",
+            TurnGuards.messagingPackageForUntrustedLaunch(null, "WhatsApp"))
+        assertEquals("com.whatsapp.w4b",
+            TurnGuards.messagingPackageForUntrustedLaunch(null, "WhatsApp Business"))
+        assertEquals("com.tencent.mm",
+            TurnGuards.messagingPackageForUntrustedLaunch(null, "WeChat"))
+        assertEquals("com.whatsapp",
+            TurnGuards.messagingPackageForUntrustedLaunch("com.whatsapp", "spoof"))
+        for (pkg in listOf("com.android.settings", "com.bank.app", "com.whatsapp.fake")) {
+            try {
+                TurnGuards.messagingPackageForUntrustedLaunch(pkg, "WhatsApp")
+                fail("untrusted launch accepted $pkg")
+            } catch (_: IllegalStateException) {}
+        }
+    }
+
+    @Test
+    fun `untrusted unknown extension tools fail closed but owner paths remain`() {
+        for (method in listOf("pickup_call", "send_money", "extension.transfer")) {
+            try {
+                TurnGuards.checkUntrustedExtension(method)
+                fail("extension allowed on untrusted turn: $method")
+            } catch (_: IllegalStateException) {}
+        }
+        // Original direct owner dispatcher leaves extension forwarding intact.
+        TurnGuards.check("pickup_call", silent = false, untrusted = false)
+    }
+
+    @Test
     fun `a user turn may call anything`() {
         for (m in listOf("screen.tap", "device.vault.fill", "scene.enter", "note.todo")) {
             TurnGuards.check(m, silent = false, untrusted = false)

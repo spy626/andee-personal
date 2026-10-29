@@ -320,6 +320,22 @@ class CommandDispatcher(
         // Checked before the fold below, so a refused call cannot so much as
         // move the card.
         TurnGuards.check(method, silent, untrusted)
+        // Provenance of notification/remote Hub commands is not user intent.
+        // Use the live active Accessibility root before every mutation.
+        // Original trusted owner turns take the exact same path as before.
+        if (untrusted) {
+            when {
+                method.startsWith("screen.") -> TurnGuards.checkUntrustedScreen(
+                    method,
+                    screenOrNull()?.livePackageForUntrustedGuard(),
+                    params?.optString("action"),
+                )
+                method == "device.launch" -> TurnGuards.messagingPackageForUntrustedLaunch(
+                    params?.optString("pkg"),
+                    params?.optString("label"),
+                )
+            }
+        }
         // The lock screen is a wall around the screen, and unlike every other
         // wall in this file it is one that fails *silently*. A gesture aimed at
         // a locked device is dropped by the input pipeline — `dispatchGesture`
@@ -384,8 +400,12 @@ class CommandDispatcher(
 
             // ---- device.* : actions, zero/low-friction ---------------------
             "device.launch" -> deviceActions.launchApp(
-                pkg = params?.optString("pkg")?.ifEmpty { null },
-                label = params?.optString("label")?.ifEmpty { null },
+                // For untrusted sources, pin the package rather than trusting
+                // a potentially spoofed app's display label.
+                pkg = if (untrusted) TurnGuards.messagingPackageForUntrustedLaunch(
+                    params?.optString("pkg"), params?.optString("label"),
+                ) else params?.optString("pkg")?.ifEmpty { null },
+                label = if (untrusted) null else params?.optString("label")?.ifEmpty { null },
             ).also {
                 // The one usage signal that needs no permission: what *we* opened. Used to rank the shelf
                 // when the system has not been allowed to say what the user opens.
@@ -1721,7 +1741,10 @@ class CommandDispatcher(
             // throws with the same "unknown method" line the else used to
             // produce, so a body with no peripherals reads exactly the same
             // as before this fallback existed.
-            else -> forwardExternal(method, params)
+            else -> {
+                if (untrusted) TurnGuards.checkUntrustedExtension(method)
+                forwardExternal(method, params)
+            }
         }
     }
 
