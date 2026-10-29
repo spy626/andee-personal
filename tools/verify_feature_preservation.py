@@ -65,6 +65,7 @@ ALLOWED_CHANGES = {
     "tools/check_xkiro_auto_scope.py",
     "docs/PHASE10B3_XKIRO_AUTO_FREE.md",
     # Phase 10B.4: system Back on visible full card; exact-scope checker active.
+    "app/src/main/java/net/kuafuai/andee/ui/FloatingWindowUi.kt",
     "app/src/androidTest/java/net/kuafuai/andee/acceptance/AndroidBackNavigationTest.kt",
     "tools/check_android_back_scope.py",
     "docs/PHASE10B4_ANDROID_BACK.md",
@@ -218,7 +219,7 @@ assert len(base) == 474, f"Upstream v0.8.0 baseline inventory unexpectedly chang
 # Phase 9 reviews three more original files (Vault, VaultUi, Manifest); 17
 # upstream paths are explicitly allowlisted in total. The
 # dedicated Phase 9 gate also compares every unrelated runtime file to Phase 8.
-# Three upstream UI/resource files are explicitly reviewed by the Phase 9.2 hotfix.\nassert preserved >= 453, f"v0.8.0 feature preservation threshold failed: {preserved}"
+# Three upstream UI/resource files are explicitly reviewed by the Phase 9.2 hotfix.\nassert preserved >= 452, f"v0.8.0 feature preservation threshold failed: {preserved}"
 unchanged = sum(base[p] == head[p] for p in base)
 print(f"PASS: {unchanged}/{len(base)} upstream v0.8.0 Git blobs byte-for-byte unchanged;"
       f" no deleted source and {len(MUST_CONTAIN)} feature paths with core entry points")
