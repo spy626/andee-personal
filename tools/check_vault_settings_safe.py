@@ -27,6 +27,10 @@ allowed = {
     "tools/verify_feature_preservation.py",
     ".github/workflows/build.yml",
     "docs/PHASE9_2_SETTINGS_CRASH_FIX.md",
+    # Phase 10A: clean Settings navigation only; no ordinary AI/voice runtime edits.
+    "app/src/androidTest/java/net/kuafuai/andee/acceptance/SettingsNavigationTest.kt",
+    "tools/check_settings_navigation.py",
+    "docs/PHASE10A_SETTINGS_NAVIGATION.md",
 }
 actual = set(git("diff", "--name-only", BASE, "HEAD").splitlines())
 assert actual <= allowed, f"Non-Settings production files modified: {sorted(actual-allowed)}"
