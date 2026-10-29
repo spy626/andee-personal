@@ -46,6 +46,9 @@ allowed = {
     # Phase 10B.2: xKiro free catalog diagnostics and documented ID only.
     "tools/check_xkiro_catalog_fix.py",
     "docs/PHASE10B2_XKIRO_CATALOG_FIX.md",
+    # Phase 10B.3: xKiro free-only Auto routing and migration.
+    "tools/check_xkiro_auto_scope.py",
+    "docs/PHASE10B3_XKIRO_AUTO_FREE.md",
 }
 actual = set(git("diff", "--name-only", BASE, "HEAD").splitlines())
 assert actual <= allowed, f"Non-Settings production files modified: {sorted(actual-allowed)}"
