@@ -39,7 +39,16 @@ jobs:
               echo "::error::$subject has no Signed-off-by line"
               missing=1
             fi
-          done < <(git rev-list --no-merges "$base..$head")
+          # Imported exact upstream v0.8.0 Git history is third-party history;
+          # preserve it unchanged rather than forging original contributor DCO.
+          # The exemption applies ONLY if that pinned release is an ancestor,
+          # and ONLY to commits reachable from that exact tag commit.
+          upstream_v080='df667e69a342d462ff0bb4593a73d84a9509d059'
+          exclusions=()
+          if git merge-base --is-ancestor "$upstream_v080" "$head"; then
+            exclusions+=("^$upstream_v080")
+          fi
+          done < <(git rev-list --no-merges "$base..$head" "${exclusions[@]}")
 
           if [ "$missing" -ne 0 ]; then
             echo
