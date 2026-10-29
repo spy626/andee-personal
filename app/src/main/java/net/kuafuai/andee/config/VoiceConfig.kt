@@ -733,6 +733,7 @@ object VoiceConfig {
                 "grounding" to p.getString("grounding", "off")!!,
                 "notify" to notifyScope(context),
                 "nudge" to nudgeLevel(context),
+                "drive" to if (driveEnabled(context)) "on" else "off",
                 "lang" to uiLanguage(context),
                 "sweep" to p.getString("sweep", "on")!!,
                 "sweep_quiet_minutes" to p.getString(
@@ -777,7 +778,7 @@ object VoiceConfig {
          * (1..200) so a stray zero doesn't make the brain refuse everything
          * and a stray thousand doesn't burn an unbounded bill.
          */
-        const val DEFAULT_MAX_STEPS = 25
+        const val DEFAULT_MAX_STEPS = 40
 
         fun maxSteps(context: Context): Int =
             (context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -900,6 +901,26 @@ object VoiceConfig {
                 context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("nudge", null),
             ).key
 
+        /**
+         * Whether it may get up of its own accord — the heartbeat and the work turns it starts
+         * ([net.kuafuai.andee.brain.Heartbeat]). The design's 「让它歇着」 switch. **Unset is on and unrecognised is
+         * off**, the split [nudgeLevel] draws: a device nobody configured gets the behaviour the product is, and a
+         * value nobody can read permits nothing. Cheap when on: a beat calls the model only when a care is overdue.
+         */
+        /** 全部 / 只看对话 on the scrollback: whether event rows are shown. Unset is shown. */
+        fun timelineEvents(context: Context): Boolean =
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("timeline_events", null) != "off"
+
+        fun setTimelineEvents(context: Context, on: Boolean) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("timeline_events", if (on) "on" else "off").apply()
+        }
+
+        fun driveEnabled(context: Context): Boolean =
+            when (context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("drive", null)) {
+                null, "on" -> true
+                else -> false
+            }
+
         /** Bubble kinds the user long-pressed away. Written directly, like `scene`: it is a set, not a field. */
         /** The pointing model for `tap_target`, if the user named one; blank = [net.kuafuai.andee.brain.Locator.modelFor] picks. */
         fun locatorModel(context: Context): String =
@@ -991,6 +1012,8 @@ object VoiceConfig {
             "grounding",
             "notify",
             "nudge",
+            "drive",
+            "timeline_events",
             "locator_model",
             "lang",
             "ball",

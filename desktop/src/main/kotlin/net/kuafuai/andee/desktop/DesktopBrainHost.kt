@@ -28,7 +28,7 @@ class DesktopBrainHost(
     /** One family of tools the Mac can run. */
     interface ToolProvider {
         fun handles(method: String): Boolean
-        fun dispatch(method: String, p: JSONObject, silent: Boolean, untrusted: Boolean): Any?
+        fun dispatch(method: String, p: JSONObject, callId: String, silent: Boolean, untrusted: Boolean): Any?
         /** Tools that exist only here and are not in the shared [ToolSchemas]. */
         fun extraTools(): JSONArray = JSONArray()
         fun methodOfExtra(toolName: String): String? = null
@@ -47,7 +47,7 @@ class DesktopBrainHost(
     override fun logWarn(tag: String, msg: String, t: Throwable?) = Log.w(tag, msg, t)
     override fun logError(tag: String, msg: String, t: Throwable?) = Log.e(tag, msg, t)
 
-    override fun maxSteps(): Int = Settings.get("max_steps").toIntOrNull()?.coerceIn(1, 200) ?: 25
+    override fun maxSteps(): Int = Settings.get("max_steps").toIntOrNull()?.coerceIn(1, 200) ?: 40
 
     override fun activeSceneName(): String? = Settings.get("scene").ifEmpty { null }
         ?.takeIf { DesktopNotebook.book.scene(it) != null }
@@ -61,10 +61,13 @@ class DesktopBrainHost(
     }
 
     override fun notebookIndex(): String = DesktopNotebook.book.indexForPrompt()
+    override fun reviewRecord(): String = DesktopNotebook.book.recordForReview()
+    override fun todoStillActive(id: String): Boolean = DesktopNotebook.book.todoById(id)?.status == "active"
     override fun scenesIndex(): String = DesktopNotebook.book.scenesForPrompt()
     override fun scene(name: String): Scene? = DesktopNotebook.book.scene(name)
 
-    override fun scrollback(): List<ScrollRow> = Scrollback.snapshot().map {
+    // Event rows are the device's record of what the brain did, not conversation: never handed back to it.
+    override fun scrollback(): List<ScrollRow> = Scrollback.snapshot().filter { it.role != Scrollback.Role.EVENT }.map {
         ScrollRow(
             isUser = it.role == Scrollback.Role.USER,
             isAssistant = it.role == Scrollback.Role.ASSISTANT,
@@ -82,10 +85,15 @@ class DesktopBrainHost(
 
     override fun planIndex(): String = DesktopNotebook.plans.indexForPrompt()
 
+    override fun selfIndex(): String = DesktopNotebook.book.selfhood.indexForPrompt()
+
+    override fun wikiIndex(): String = DesktopNotebook.book.wiki.indexForPrompt()
+
     override fun friendsIndex(): String = Peers.tasks.indexForPrompt()
 
     override fun foldTopic(title: String, summary: String, rows: List<ScrollRow>, text: String): FoldedTopic? {
-        val t = Scrollback.fold(title, summary, rows.mapNotNull { it.handle as? Long }, text) ?: return null
+        val ids = rows.mapNotNull { it.handle as? Long }
+        val t = Scrollback.fold(title, summary, ids + Scrollback.eventsWithin(ids), text) ?: return null
         return FoldedTopic(t.id, t.title, t.summary)
     }
 
@@ -98,7 +106,7 @@ class DesktopBrainHost(
         ToolSchemas.methodOf(toolName)?.takeIf { m -> providers.any { it.handles(m) } }
             ?: providers.firstNotNullOfOrNull { it.methodOfExtra(toolName) }
 
-    override fun dispatch(method: String, params: JSONObject, silent: Boolean, untrusted: Boolean): Any? {
+    override fun dispatch(method: String, params: JSONObject, callId: String, silent: Boolean, untrusted: Boolean): Any? {
         TurnGuards.check(method, silent, untrusted)
         val p = providers.firstOrNull { it.handles(method) }
             ?: throw IllegalArgumentException("unknown method $method")
@@ -107,10 +115,12 @@ class DesktopBrainHost(
         if (!silent && (method.startsWith("screen.") || method.startsWith("shell.") || method.startsWith("device."))) {
             MacBall.onTool()
         }
-        return p.dispatch(method, params, silent, untrusted)
+        return p.dispatch(method, params, callId, silent, untrusted)
     }
 
     override fun turnStarted(kind: String) = providers.forEach { it.turnStarted(kind) }
+
+    override fun event(e: net.kuafuai.andee.brain.BrainEvent) = TimelineEvents.brain(e)
 
     override fun traceDir(): File = AppDirs.root
 }
