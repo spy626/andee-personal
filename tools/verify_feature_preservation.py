@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # Changes to source files, permissions, the mascot, or existing tests fail CI.
 ALLOWED_CHANGES = {
     ".github/workflows/build.yml",
+    ".github/workflows/dco.yml",  # Exact pinned upstream history sign-off exemption only.
     "gradle/libs.versions.toml",
     "gradle/wrapper/gradle-wrapper.properties",
     "docs/FEATURE_PRESERVATION_RECOVERY.md",
