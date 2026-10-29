@@ -23,6 +23,14 @@ ALLOWED_CHANGES = {
     "docs/FEATURE_PARITY_AUDIT.md",
     "tools/verify_feature_preservation.py",
     "tools/check_v080_feature_integration.py",
+    # Phase 9 biometric-only Vault hardening. No general owner-approval redesign.
+    "app/src/main/java/net/kuafuai/andee/config/Vault.kt",
+    "app/src/main/java/net/kuafuai/andee/config/VaultBioGate.kt",
+    "app/src/main/java/net/kuafuai/andee/ui/VaultUnlockActivity.kt",
+    "app/src/main/java/net/kuafuai/andee/ui/VaultUi.kt",
+    "app/src/main/AndroidManifest.xml",
+    "tools/check_vault_biometric_only.py",
+    "docs/PHASE9_VAULT_BIOMETRIC_ONLY.md",
     "docs/PHASE8_V080_INTEGRATION.md",
     # Explicitly scoped transport fixes. Existing UI/messaging/tool
     # dispatch/voice/rendering source must remain byte-for-byte identical.
