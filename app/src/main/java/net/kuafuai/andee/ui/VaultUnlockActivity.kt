@@ -16,11 +16,14 @@ import net.kuafuai.andee.config.VaultBioGate
 class VaultUnlockActivity : Activity() {
     private var finished = false
     private var cancellation: CancellationSignal? = null
+    private val promptId: Long by lazy {
+        intent.getLongExtra(VaultBioGate.EXTRA_PROMPT_ID, 0L)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-        if (savedInstanceState != null) {
+        if (savedInstanceState != null || promptId == 0L) {
             respond(false)
             return
         }
@@ -62,14 +65,14 @@ class VaultUnlockActivity : Activity() {
         // resumes (especially automatic credential fill into another app).
         finish()
         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-            VaultBioGate.complete(success)
+            VaultBioGate.complete(success, promptId, applicationContext)
         }, 450L)
     }
 
     override fun onDestroy() {
         if (!finished) {
             finished = true
-            VaultBioGate.complete(false)
+            VaultBioGate.complete(false, promptId, applicationContext)
         }
         cancellation?.cancel()
         super.onDestroy()
