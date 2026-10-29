@@ -12,6 +12,7 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import net.kuafuai.andee.config.VaultBioGate;
 
 import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -31,6 +32,8 @@ import static org.junit.Assume.assumeFalse;
  */
 @RunWith(AndroidJUnit4.class)
 public class VaultScreenLockTest {
+    private boolean initialObserverState = false;
+
     private Context context() {
         return InstrumentationRegistry.getInstrumentation().getTargetContext();
     }
@@ -46,9 +49,18 @@ public class VaultScreenLockTest {
         field("unlockedUntil").setLong(null, SystemClock.elapsedRealtime() + 60_000L);
     }
 
-    @After
-    public void clearFakeSession() {
+    @Before
+    public void rememberOriginalState() throws Exception {
+        initialObserverState = field("observerRegistered").getBoolean(null);
         VaultBioGate.INSTANCE.lockNow();
+    }
+
+    @After
+    public void clearFakeSession() throws Exception {
+        VaultBioGate.INSTANCE.lockNow();
+        // Synthetic tests must not leave a fake receiver-registration flag
+        // behind for any other Android instrumentation test in this process.
+        field("observerRegistered").setBoolean(null, initialObserverState);
     }
 
     @Test
