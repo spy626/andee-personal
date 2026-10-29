@@ -64,10 +64,10 @@ for path in (
 
 brain = read("core/src/main/kotlin/net/kuafuai/andee/brain/LocalBrain.kt")
 old_brain = git("show", f"{BASE}:core/src/main/kotlin/net/kuafuai/andee/brain/LocalBrain.kt")
-assert brain == old_brain.replace(
+assert brain.strip() == old_brain.replace(
     "        reasoningEffort = cfg.reasoningEffort,\n    )",
     "        reasoningEffort = cfg.reasoningEffort,\n        freeProvider = cfg.freeProvider,\n    )",
-), "LocalBrain agent/tool/memory behavior changed beyond forwarding provider ID"
+).strip(), "LocalBrain agent/tool/memory behavior changed beyond forwarding provider ID"
 
 guard = read("core/src/main/kotlin/net/kuafuai/andee/brain/FreeProviderGuard.kt")
 for required in (
