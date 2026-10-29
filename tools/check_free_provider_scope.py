@@ -19,6 +19,7 @@ def read(path):
 allowed = {
     "app/src/main/java/net/kuafuai/andee/config/VoiceConfig.kt",
     "app/src/main/java/net/kuafuai/andee/config/ProviderKeyStore.kt",
+    "app/src/main/java/net/kuafuai/andee/config/FactoryReset.kt",
     "app/src/main/java/net/kuafuai/andee/ui/SettingsUi.kt",
     "app/src/main/res/values/strings.xml",
     "app/src/main/res/values-en/strings.xml",
@@ -110,6 +111,8 @@ for req in ("AndroidKeyStore", "AES/GCM/NoPadding", "setKeySize(256)",
             "require(provider in supported)"):
     assert req in keys
 assert "VaultBioGate" not in keys, "Regular inference must not add biometric approval"
+assert "fun wipe(context: Context)" in keys
+assert 'ProviderKeyStore.wipe(it)' in read("app/src/main/java/net/kuafuai/andee/config/FactoryReset.kt")
 
 ui = read("app/src/main/java/net/kuafuai/andee/ui/SettingsUi.kt")
 assert 'private fun freeProviderSection(' in ui
