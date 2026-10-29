@@ -1203,6 +1203,9 @@ class BodyCoreService : Service() {
             return
         }
         typingFromFullscreen = true
+        // Full chat now owns Android Back. Before opening a real Activity and
+        // keyboard, release that focus so Back dismisses the IME/field first.
+        window.setTypingBackPassthrough(true)
         net.kuafuai.andee.ui.TextInputActivity.start(this, then)
     }
 
@@ -1225,6 +1228,7 @@ class BodyCoreService : Service() {
     private fun typingFinished() {
         window.setTypingTop(0)
         window.setAway(false)
+        window.setTypingBackPassthrough(false)
         if (typingFromFullscreen && !window.isCompact()) dispatcher.expand()
         typingFromFullscreen = false
     }
