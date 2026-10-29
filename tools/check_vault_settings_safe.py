@@ -31,6 +31,16 @@ allowed = {
     "app/src/androidTest/java/net/kuafuai/andee/acceptance/SettingsNavigationTest.kt",
     "tools/check_settings_navigation.py",
     "docs/PHASE10A_SETTINGS_NAVIGATION.md",
+    # Phase 10B.1: explicit free provider/zero-cost guard and encrypted keys only.
+    "app/src/main/java/net/kuafuai/andee/config/VoiceConfig.kt",
+    "app/src/main/java/net/kuafuai/andee/config/ProviderKeyStore.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/config/BrainConfig.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/brain/LlmClient.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/brain/FreeProviderGuard.kt",
+    "core/src/test/kotlin/net/kuafuai/andee/brain/FreeProviderGuardTest.kt",
+    "app/src/androidTest/java/net/kuafuai/andee/acceptance/FreeProviderKeysTest.kt",
+    "tools/check_free_provider_scope.py",
+    "docs/PHASE10B1_FREE_PROVIDERS.md",
 }
 actual = set(git("diff", "--name-only", BASE, "HEAD").splitlines())
 assert actual <= allowed, f"Non-Settings production files modified: {sorted(actual-allowed)}"
