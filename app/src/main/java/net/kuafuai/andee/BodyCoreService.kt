@@ -1980,6 +1980,7 @@ class BodyCoreService : Service() {
                     val after = net.kuafuai.andee.config.VoiceConfig.hubConfig(this)
                     val afterBrain = net.kuafuai.andee.config.VoiceConfig.brainConfig(this)
                     if (before.url != after.url || before.deviceName != after.deviceName ||
+                        before.publicKey != after.publicKey ||
                         !beforeBrain.sameBackend(afterBrain)
                     ) {
                         android.util.Log.i("Body", "brain/hub config changed → restart brain")
@@ -3280,8 +3281,14 @@ class BodyCoreService : Service() {
             reportNoBrain("Remote Hub needs a valid wss:// address. Change it in Settings.")
             return
         }
+        if (!net.kuafuai.andee.net.HubIdentity.isValidPinnedKey(hc.publicKey)) {
+            android.util.Log.w("Body", "remote Hub signing public key missing/invalid")
+            reportNoBrain("Remote Hub needs a trusted P-256 public key in Settings.")
+            return
+        }
         val client = net.kuafuai.andee.net.BodyWsClient(
             url = hc.url,
+            hubPublicKey = hc.publicKey,
             deviceId = hc.deviceId,
             deviceName = hc.deviceName,
             dispatcher = dispatcher,

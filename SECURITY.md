@@ -234,3 +234,23 @@ crediting the reporter.
 
 Fixes may ship in a normal release. Users are encouraged to track the default
 branch or the latest release rather than running an old build.
+
+## Remote signed-Hub identity hardening (recovery Phase 3 draft)
+
+On `recovery/phase3-signed-hub-identity` the remote WSS Hub must prove
+possession of an owner-pinned P-256 private signing key by answering a
+fresh 32-byte challenge, tied to this phone's device ID. No Hub tool
+schemas, local event payloads, requests, progress text or final answers
+are processed before authentication. Invalid/missing signing keys and
+missing/invalid/late proof fail closed. A new challenge is required for
+every reconnect; changing/clearing the pin in Settings revokes trust
+when the service restarts. The signing private key stays on the Hub.
+
+**Compatibility and security limits:** Existing remote Hub servers without
+the signed-identity protocol will not connect until the Hub owner adds the
+adapter documented in `docs/HUB_SIGNED_IDENTITY_PROTOCOL.md`. The default
+local AI, original SMS/WhatsApp, voice, blue mascot and local peer features
+remain unchanged. This is manually pinned authentication, not automatic
+QR pairing or a new phone-to-phone remote-control feature. A trusted but
+compromised Hub can still issue commands; prompt-injection and sensitive
+per-action owner authorization remain unresolved. **NOT MAIN-PHONE-READY.**

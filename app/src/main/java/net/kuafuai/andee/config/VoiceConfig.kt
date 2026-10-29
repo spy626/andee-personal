@@ -316,6 +316,7 @@ object VoiceConfig {
             val url: String,           // empty = don't dial out
             val deviceId: String,      // stable, generated once
             val deviceName: String,    // human-friendly, editable
+            val publicKey: String,     // verified remote Hub signing identity (P-256 SPKI)
         )
 
         fun hubConfig(context: Context): HubConfig {
@@ -329,6 +330,7 @@ object VoiceConfig {
                 url = p.getString("hub_url", "").orEmpty().trim(),
                 deviceId = deviceId,
                 deviceName = p.getString("device_name", "").orEmpty().ifEmpty { deviceId },
+                publicKey = p.getString("hub_public_key", "").orEmpty().trim(),
             )
         }
 
@@ -637,6 +639,11 @@ object VoiceConfig {
                 // override once saved could never be taken out.
                 // The card shows the key in effect, so saving it back unchanged must not
                 // pin the build's key as a user override: store only a different one.
+                // A blank public key deliberately revokes any previous Hub trust.
+                if (k == "hub_public_key" && v.isBlank()) {
+                    p.remove(k)
+                    continue
+                }
                 if (k == "codeflying_key" && v.trim() == codeFlyingBuiltInKey(context)) {
                     p.remove(k)
                     continue
@@ -691,6 +698,7 @@ object VoiceConfig {
                 "google_tts_model" to p.getString("google_tts_model", "").orEmpty(),
                 "google_language" to p.getString("google_language", "").orEmpty(),
                 "hub_url" to hc.url,
+                "hub_public_key" to hc.publicKey,
                 "device_id" to hc.deviceId,
                 "device_name" to hc.deviceName,
                 // What the card selects: nothing saved is CodeFlying (the default tab for a
@@ -975,7 +983,7 @@ object VoiceConfig {
             "google_api_key", "google_base_url",
             "google_project", "google_location",
             "google_asr_model", "google_tts_model", "google_language",
-            "hub_url", "device_name",
+            "hub_url", "hub_public_key", "device_name",
             "brain",
             "show_hub",
             "llm_api_key", "llm_base_url", "llm_model",

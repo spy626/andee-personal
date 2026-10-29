@@ -76,3 +76,21 @@ extensions. It does not replace or insert a second confirmation into any SMS,
 WhatsApp or normal assistant workflow. Verified tests are not a substitute for
 physical Android pairing, passive-viewer, extension and original message-reply
 acceptance. Recovery branch remains **not safe for a main phone**.
+
+## Phase 3 — pinned signed identity for the remote Hub (draft)
+
+- Existing remote Hub URL remains WSS-only; adds a user-editable **public**
+  P-256 SPKI identity key in the existing cloud backend tab. Clearing the
+  key revokes future Hub connections. On backend setting changes the Hub
+  client is rebuilt with the new pin.
+- An outbound Hub socket starts unauthenticated. It sends only a fresh random
+  nonce and device ID in `auth.challenge`. Until a valid signed `auth.proof`
+  arrives, no tool schema registration, events, or commands. Invalid or missing
+  signing identity / replay / wrong device ID / failed signature causes refusal;
+  no compatibility bypass to the old insecure Hub protocol.
+- Existing local AI, SMS controller, WhatsApp notification/triage, CardUi,
+  LocalBrain, voice control, floating window and mascot rendering stay untouched.
+- External Hub server adapter is **not in this repository**; legacy remote
+  Hub workflows require that adapter and live integration acceptance before
+  calling feature parity complete. Session identity does not prevent malicious
+  instructions from a compromised but authenticated Hub.

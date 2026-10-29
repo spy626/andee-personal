@@ -654,6 +654,15 @@ class SettingsUi(
             lctx.getString(R.string.settings_device_name),
             hint = lctx.getString(R.string.settings_device_name_hint),
         )
+        // Public signing key is manually obtained from the trusted Hub owner;
+        // it is NOT a private key, bearer token, or secret.
+        field(
+            hubBlock,
+            "hub_public_key",
+            "Trusted Hub identity key (P-256 Base64)",
+            hint = "Paste verified Hub public key (SPKI)",
+        )
+        note(hubBlock, "Remote Hub must support signed identity proof before any tools are exposed.")
         note(hubBlock, lctx.getString(R.string.settings_brain_cloud_note))
 
         // ---- CodeFlying tab ----
