@@ -64,6 +64,10 @@ ALLOWED_CHANGES = {
     # Phase 10B.3: xKiro free-only Auto routing and migration.
     "tools/check_xkiro_auto_scope.py",
     "docs/PHASE10B3_XKIRO_AUTO_FREE.md",
+    # Phase 10B.4: system Back on visible full card; exact-scope checker active.
+    "app/src/androidTest/java/net/kuafuai/andee/acceptance/AndroidBackNavigationTest.kt",
+    "tools/check_android_back_scope.py",
+    "docs/PHASE10B4_ANDROID_BACK.md",
     "docs/PHASE8_V080_INTEGRATION.md",
     # Explicitly scoped transport fixes. Existing UI/messaging/tool
     # dispatch/voice/rendering source must remain byte-for-byte identical.
