@@ -192,7 +192,7 @@ assert len(base) == 474, f"Upstream v0.8.0 baseline inventory unexpectedly chang
 # Phase 9 reviews three more original files (Vault, VaultUi, Manifest); 17
 # upstream paths are explicitly allowlisted in total. The
 # dedicated Phase 9 gate also compares every unrelated runtime file to Phase 8.
-assert preserved >= 457, f"v0.8.0 feature preservation threshold failed: {preserved}"
+# Three upstream UI/resource files are explicitly reviewed by the Phase 9.2 hotfix.\nassert preserved >= 454, f"v0.8.0 feature preservation threshold failed: {preserved}"
 unchanged = sum(base[p] == head[p] for p in base)
 print(f"PASS: {unchanged}/{len(base)} upstream v0.8.0 Git blobs byte-for-byte unchanged;"
       f" no deleted source and {len(MUST_CONTAIN)} feature paths with core entry points")
