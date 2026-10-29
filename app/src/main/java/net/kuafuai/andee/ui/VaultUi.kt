@@ -43,6 +43,17 @@ class VaultUi(
         context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
     private var root: View? = null
+    private val lockWatcher = Handler(Looper.getMainLooper())
+    private val watchLock = object : Runnable {
+        override fun run() {
+            if (root == null) return
+            if (!VaultBioGate.ready(context)) {
+                hide()
+            } else {
+                lockWatcher.postDelayed(this, 1_000L)
+            }
+        }
+    }
 
     /** Null = the list; non-null = editing this entry (blank id = new). */
     private var editing: Vault.Entry? = null
@@ -89,16 +100,14 @@ class VaultUi(
             root = v
             OwnCard.shown()
             Glass.enter(v)
-            // Close stored credential fields before the biometric session
-            // expires; a later open requires biometric again.
-            Handler(Looper.getMainLooper()).postDelayed({
-                if (root === v) { editing = null; hide() }
-            }, VaultBioGate.sessionMillis() - 500L)
+            lockWatcher.removeCallbacks(watchLock)
+            lockWatcher.postDelayed(watchLock, 1_000L)
         }
     }
 
     fun hide() {
         val v = root ?: return
+        lockWatcher.removeCallbacks(watchLock)
         root = null
         editing = null
         Glass.exit(v) {
