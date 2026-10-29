@@ -28,6 +28,68 @@ object TurnGuards {
      * A screen gesture can itself confirm a payment/send button; this list
      * reduces direct-tool abuse but does NOT solve indirect UI prompt injection.
      */
+    /** Only known messaging packages may receive untrusted screen gestures. */
+    private val MESSAGING_PACKAGES = setOf(
+        "com.whatsapp",
+        "com.whatsapp.w4b",
+        "com.tencent.mm",
+    )
+
+    private val SCREEN_MUTATIONS = setOf(
+        "screen.tap", "screen.tap_target", "screen.tap_id",
+        "screen.swipe", "screen.long_press", "screen.long_press_id",
+        "screen.type", "screen.submit_input",
+    )
+
+    /**
+     * A screen action from a notification/remote Hub must stay inside a
+     * supported messaging app, using the CURRENT active Accessibility root
+     * rather than the previously-dumped or model-supplied package.
+     *
+     * This preserves existing WhatsApp reply gestures while refusing taps
+     * into Settings, payment, unknown and obscured windows. It does not
+     * determine whether a Send button WITHIN WhatsApp is owner-authorized.
+     */
+    fun checkUntrustedScreen(method: String, livePackage: String?, action: String? = null) {
+        if (method !in SCREEN_MUTATIONS && method != "screen.global") return
+        if (livePackage !in MESSAGING_PACKAGES) {
+            throw IllegalStateException(
+                "Untrusted screen actions are only allowed in a verified messaging app; " +
+                    "the current foreground app is not approved: $method",
+            )
+        }
+        if (method == "screen.global" && action?.lowercase() != "back") {
+            throw IllegalStateException(
+                "Untrusted screen navigation may only go back inside a messaging app: $method",
+            )
+        }
+    }
+
+    /** Map a user-visible label to a fixed real package, never a spoofable app label. */
+    fun messagingPackageForUntrustedLaunch(pkg: String?, label: String?): String {
+        val selected = when {
+            pkg in MESSAGING_PACKAGES -> pkg!!
+            pkg.isNullOrBlank() -> when (label?.trim()?.lowercase()) {
+                "whatsapp" -> "com.whatsapp"
+                "whatsapp business" -> "com.whatsapp.w4b"
+                "wechat", "微信" -> "com.tencent.mm"
+                else -> null
+            }
+            else -> null
+        }
+        return selected ?: throw IllegalStateException(
+            "Untrusted turns may launch only the official messaging package; " +
+                "use a direct owner request for other apps.",
+        )
+    }
+
+    /** Extension tools are dynamic and not classified as safe. Fail closed on untrusted turns. */
+    fun checkUntrustedExtension(method: String) {
+        throw IllegalStateException(
+            "Untrusted notification or remote Hub cannot invoke an unclassified extension tool: $method",
+        )
+    }
+
     private val UNTRUSTED_DIRECT_ACTIONS = setOf(
         "device.sms.send",
         "device.dial",

@@ -139,3 +139,11 @@ owner's primary Android device or close the prior sensitive-action risk.
   indirect malicious UI automation. The Android accessibility actions,
   SMS/WhatsApp live send behavior and owner-confirmation UX remain
   unverified on a physical spare phone. Do not tag as main-phone-safe.
+
+## Phase 7 — untrusted screen and dynamic tool boundary (draft)
+
+- Only `TurnGuards`, `CommandDispatcher`, `ScreenController` (one read-only live active-root package accessor) and `BodyWsClient` have changed in production compared with Phase 6. **No edits** in `DeviceCommsController`, WhatsApp notification handling/triage, `CardUi`, local AI, voice, original UI renderer, moods, or actual screen-action methods.
+- Notification and remote Hub gestures `screen.tap`, tap target/id, swipe, long press, type and submit are refused unless the **current live Accessibility root** shows official WhatsApp, WhatsApp Business or WeChat package. Old tree snapshots are not used for the decision; absent/unknown/root-of-our-own-overlay denies. Untrusted global action only allows **Back** while in a known messaging foreground. Read-only UI tree/screenshots remain available for notification triage.
+- Untrusted `device.launch` uses a fixed real package ID even if the brain supplies a label, and denies launching settings/banking/unknown apps. Local trusted owner turns still launch everything exactly as before.
+- Dynamic `forwardExternal` extension/market methods denied for any untrusted origin. Signed remote Hub extension tools are rejected **before** task start. Trusted local-owner use and existing registration/wire protocol remain unchanged, but the prior remote Hub and notification extension automation capabilities are intentionally restricted.
+- **Not complete safety:** WhatsApp/WeChat still expose Send, Call, attachments and other irreversible UI controls. A malicious message or compromised Hub may manipulate allowed messaging buttons; screen foreground can also change between check and action. Neither simulated emulator nor source tests prove reply/editor correctness. Do not enable sensitive permissions on the main phone.

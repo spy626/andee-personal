@@ -180,6 +180,12 @@ class BodyWsClient(
             respondError(id, "unknown tool: $toolName", source)
             return
         }
+        // Extension schemas are dynamic: a signed Hub is still not the phone
+        // owner, and extension tools may control calls or external machines.
+        if (ToolSchemas.methodOf(toolName) == null) {
+            respondError(id, "remote Hub cannot invoke unclassified extension tool", source)
+            return
+        }
         // Signed Hub identity verifies a server, NOT that the device owner
         // issued every instruction. Label every remote request as untrusted;
         // this blocks vault/peer/scene direct writes and dangerous direct

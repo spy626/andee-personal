@@ -3132,6 +3132,17 @@ class ScreenController(
         if (android.os.Build.VERSION.SDK_INT >= 33) service.getRootInActiveWindow(PREFETCH_WALK)
         else service.rootInActiveWindow
 
+    /**
+     * A live package observation for the untrusted gesture boundary.
+     * Never fall back to a previous tree dump or cached foreground package:
+     * either can still say WhatsApp after the user opens a banking app.
+     */
+    fun livePackageForUntrustedGuard(): String? = runCatching {
+        activeRoot()?.packageName?.toString()?.takeIf {
+            it.isNotBlank() && it != service.packageName
+        }
+    }.getOrNull()
+
     private fun rootOf(w: AccessibilityWindowInfo): AccessibilityNodeInfo? =
         if (android.os.Build.VERSION.SDK_INT >= 33) w.getRoot(PREFETCH_WALK) else w.root
 

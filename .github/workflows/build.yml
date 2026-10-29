@@ -43,6 +43,7 @@ jobs:
       - run: python3 tools/check_signed_hub_identity.py
       - run: python3 tools/check_original_feature_contracts.py
       - run: python3 tools/check_sensitive_turn_gates.py
+      - run: python3 tools/check_untrusted_screen_and_extension.py
 
       - uses: actions/upload-artifact@v4
         with:

@@ -273,3 +273,9 @@ extension tool methods can also have side effects. An authenticated Hub
 still sees screen/tool information and may exercise allowed screen actions.
 A secure, real-device-aware UI action authorization layer remains a blocker
 for primary-phone release.
+
+## Phase 7 (draft): live untrusted screen boundary / dynamic extension isolation
+
+Only authenticated owner-initiated **local** turns retain unrestricted screen gestures and extension tools. Notification and remote Hub commands have a live active Accessibility-package screen-action guard limited to WhatsApp, WhatsApp Business and WeChat. No stale page dump or model-supplied package is trusted for this decision, and untrusted app labels map to fixed package IDs. Missing/unknown foreground, settings/payment apps, and untrusted dynamic extension method forwarding all fail closed. The original local connection protocol, WhatsApp notification cards, SMS sender, local AI, voice and mascot are not redesigned.
+
+**Residual risk remains high:** a malicious untrusted message can still convince the assistant to press **Send/Call/Approve** inside a supported messaging app, and UI focus can change after the package check. Remote signed Hub messages and local peer-connection consent are not proof of per-action owner intent. This recovery branch remains **not approved for any daily-use primary phone**; future work needs target-level authorization and real isolated-device acceptance.
