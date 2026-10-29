@@ -30,6 +30,15 @@ allowed = {
     "tools/verify_feature_preservation.py",
     ".github/workflows/build.yml",
     "docs/PHASE10A_SETTINGS_NAVIGATION.md",
+    # Phase 10B.1: explicit free provider/zero-cost guard and encrypted keys only.
+    "app/src/main/java/net/kuafuai/andee/config/ProviderKeyStore.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/config/BrainConfig.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/brain/LlmClient.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/brain/FreeProviderGuard.kt",
+    "core/src/test/kotlin/net/kuafuai/andee/brain/FreeProviderGuardTest.kt",
+    "app/src/androidTest/java/net/kuafuai/andee/acceptance/FreeProviderKeysTest.kt",
+    "tools/check_free_provider_scope.py",
+    "docs/PHASE10B1_FREE_PROVIDERS.md",
 }
 changed = set(git("diff", "--name-only", BASE, "HEAD").splitlines())
 assert changed <= allowed, f"Unexpected code changes: {sorted(changed-allowed)}"
