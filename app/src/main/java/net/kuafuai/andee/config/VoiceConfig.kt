@@ -2,6 +2,7 @@ package net.kuafuai.andee.config
 
 import android.content.Context
 import net.kuafuai.andee.BuildConfig
+import net.kuafuai.andee.brain.FreeProviderGuard
 import java.util.UUID
 
 /**
@@ -394,6 +395,33 @@ object VoiceConfig {
                         .orEmpty().trim().ifEmpty { DEFAULT_REASONING_EFFORT },
                 )
             }
+            // Phase 10B.1: only an explicitly selected local free provider
+            // overrides the legacy custom endpoint. CodeFlying and Hub never
+            // enter this path and retain their exact original behavior.
+            val freeProvider = p.getString("free_provider", FreeProviderGuard.LEGACY)
+                .orEmpty().trim().lowercase()
+            if (mode == BRAIN_LOCAL && freeProvider in setOf(
+                    FreeProviderGuard.XKIRO, FreeProviderGuard.GROQ,
+                    FreeProviderGuard.OPENROUTER,
+                )) {
+                val models = FreeProviderGuard.models(freeProvider)
+                val chosen = p.getString("free_model_$freeProvider", models.first())
+                    .orEmpty().ifEmpty { models.first() }
+                val acknowledged = freeProvider != FreeProviderGuard.GROQ ||
+                    p.getString("free_groq_confirm", "off") == "on"
+                val credential = if (acknowledged) {
+                    runCatching { ProviderKeyStore.get(context, freeProvider) }.getOrDefault("")
+                } else ""
+                // A missing key or unapproved model fails closed in LlmClient.
+                // No fallback to another provider or to direct DeepSeek.
+                return BrainConfig(
+                    mode = BRAIN_LOCAL, apiKey = credential,
+                    baseUrl = FreeProviderGuard.endpoint(freeProvider),
+                    model = chosen, thinking = false,
+                    reasoningEffort = DEFAULT_REASONING_EFFORT,
+                    freeProvider = freeProvider,
+                )
+            }
             // Language-dependent defaults: the blank-row fallback must be the
             // value the 本机 tab's hint advertised, or an English card would
             // promise OpenAI in the placeholder and then call DeepSeek.
@@ -722,6 +750,16 @@ object VoiceConfig {
                 // a placeholder, and the row's language-aware hint
                 // ([llmModelDefault]: DeepSeek for a Chinese card, OpenAI for an
                 // English one) could never be seen.
+                "free_provider" to p.getString("free_provider", FreeProviderGuard.LEGACY)
+                    .orEmpty().ifBlank { FreeProviderGuard.LEGACY },
+                "free_model_xkiro" to p.getString("free_model_xkiro", FreeProviderGuard.XKIRO_DEEPSEEK)
+                    .orEmpty().ifBlank { FreeProviderGuard.XKIRO_DEEPSEEK },
+                "free_model_groq" to p.getString("free_model_groq", FreeProviderGuard.GROQ_120B)
+                    .orEmpty().ifBlank { FreeProviderGuard.GROQ_120B },
+                "free_model_openrouter" to p.getString("free_model_openrouter", FreeProviderGuard.OPENROUTER_AUTO)
+                    .orEmpty().ifBlank { FreeProviderGuard.OPENROUTER_AUTO },
+                "free_groq_confirm" to p.getString("free_groq_confirm", "off")
+                    .orEmpty().ifBlank { "off" },
                 "llm_api_key" to p.getString("llm_api_key", "").orEmpty(),
                 "llm_base_url" to p.getString("llm_base_url", "").orEmpty(),
                 "llm_model" to p.getString("llm_model", "").orEmpty(),
@@ -1008,6 +1046,8 @@ object VoiceConfig {
             "brain",
             "show_hub",
             "llm_api_key", "llm_base_url", "llm_model",
+            "free_provider", "free_model_xkiro", "free_model_groq",
+            "free_model_openrouter", "free_groq_confirm",
             "llm_thinking", "llm_reasoning_effort",
             "grounding",
             "notify",
