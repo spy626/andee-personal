@@ -47,6 +47,9 @@ allowed = {
     "app/src/androidTest/java/net/kuafuai/andee/acceptance/FreeProviderKeysTest.kt",
     "tools/check_free_provider_scope.py",
     "docs/PHASE10B1_FREE_PROVIDERS.md",
+    # Phase 10B.2: xKiro free catalog diagnostics and documented ID only.
+    "tools/check_xkiro_catalog_fix.py",
+    "docs/PHASE10B2_XKIRO_CATALOG_FIX.md",
     ".github/workflows/build.yml",
 }
 changed = set(git("diff", "--name-only", BASE, "HEAD").splitlines())
