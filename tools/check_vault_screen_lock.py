@@ -24,6 +24,13 @@ allowed = {
     "tools/verify_feature_preservation.py",
     "tools/check_vault_screen_lock.py",
     "docs/PHASE9_1_SCREEN_LOCK_REVOCATION.md",
+    # Phase 9.2: narrow Settings locked-Vault crash fix and tests.
+    "app/src/main/java/net/kuafuai/andee/ui/SettingsUi.kt",
+    "app/src/main/res/values/strings.xml",
+    "app/src/main/res/values-en/strings.xml",
+    "app/src/androidTest/java/net/kuafuai/andee/acceptance/SettingsLockedVaultTest.kt",
+    "tools/check_vault_settings_safe.py",
+    "docs/PHASE9_2_SETTINGS_CRASH_FIX.md",
     ".github/workflows/build.yml",
 }
 changed = set(git("diff", "--name-only", BASE, "HEAD").splitlines())

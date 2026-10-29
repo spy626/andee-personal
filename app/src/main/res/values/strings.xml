@@ -87,6 +87,8 @@
     <string name="common_clear">清除</string>
     <string name="common_delete">删除</string>
     <string name="settings_section_vault">保险箱</string>
+    <string name="settings_vault_locked_note">保险箱已锁定。点击“管理”并通过指纹验证，才能查看已保存的账号。</string>
+    <string name="settings_vault_unavailable_note">保险箱暂时无法读取。已保存的账号没有被更改。</string>
     <string name="settings_vault_empty_note">还没有存账号 —— 存了之后，Andee 办事时可以直接用它们登录</string>
     <string name="settings_vault_count_note">已存 %1$d 个账号 —— 手机号邮箱大脑读得到，密码只由设备替你敲进输入框</string>
     <string name="settings_section_gear">装备</string>

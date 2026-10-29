@@ -21,6 +21,7 @@ import net.kuafuai.andee.R
 import net.kuafuai.andee.config.FactoryReset
 import net.kuafuai.andee.config.Notebook
 import net.kuafuai.andee.config.Vault
+import net.kuafuai.andee.config.VaultBioGate
 import net.kuafuai.andee.config.VoiceConfig
 import net.kuafuai.andee.i18n.AppLocale
 import net.kuafuai.andee.wake.WakeTemplates
@@ -1073,7 +1074,17 @@ class SettingsUi(
     private fun vaultSection(form: LinearLayout) {
         val panel = group(form, lctx.getString(R.string.settings_section_vault))
         fun summary(): String {
-            val n = Vault.entries(context).size
+            // Phase 9 biometric Vault: Settings is NOT a credential request.
+            // Never read a locked Vault just to show its count. That read
+            // throws and used to crash the entire Settings overlay on open.
+            if (!VaultBioGate.ready(context)) {
+                return lctx.getString(R.string.settings_vault_locked_note)
+            }
+            val n = runCatching { Vault.entries(context).size }.getOrElse {
+                // Key invalidation/corruption must never look like zero saved
+                // credentials. Do not erase data or bypass the biometric gate.
+                return lctx.getString(R.string.settings_vault_unavailable_note)
+            }
             return if (n == 0) {
                 lctx.getString(R.string.settings_vault_empty_note)
             } else {

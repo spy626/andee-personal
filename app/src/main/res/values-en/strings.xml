@@ -110,6 +110,8 @@
     <string name="common_clear">Clear</string>
     <string name="common_delete">Delete</string>
     <string name="settings_section_vault">Vault</string>
+    <string name="settings_vault_locked_note">Vault locked. Tap Manage and confirm your fingerprint to view saved accounts.</string>
+    <string name="settings_vault_unavailable_note">Vault is unavailable. Existing saved accounts have not been changed.</string>
     <string name="settings_vault_empty_note">No accounts yet — once saved, Andee can log in as you when a task needs it</string>
     <string name="settings_vault_count_note">%1$d saved — the brain may read the phone and email, but only this device types the password</string>
     <string name="settings_section_gear">Gear</string>
