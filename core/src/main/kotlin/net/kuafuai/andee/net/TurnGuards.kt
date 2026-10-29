@@ -20,6 +20,26 @@ object TurnGuards {
     private val PLAN_WRITES = setOf("note.directions", "note.day_plan")
 
     /**
+     * Do not let a notification or a remote Hub (neither is the owner's live
+     * voice/touch turn) trigger a direct irreversible action or ask Android to
+     * elevate permissions. Crucially, screen.* and ui.ask are NOT denied here:
+     * the owner's existing WhatsApp reply and card workflows use them.
+     *
+     * A screen gesture can itself confirm a payment/send button; this list
+     * reduces direct-tool abuse but does NOT solve indirect UI prompt injection.
+     */
+    private val UNTRUSTED_DIRECT_ACTIONS = setOf(
+        "device.sms.send",
+        "device.dial",
+        "device.calendar.add",
+        "device.permissions.request",
+        "device.open_url",
+        "device.alarm",
+        "dog.move", "dog.sequence", "dog.turn", "dog.speed",
+        "dog.pose", "dog.calibrate",
+    )
+
+    /**
      * What the quiet-hour review may do to the gear shelf besides reading the notebook: write down what an
      * app is *for*. It must not change what the user keeps out of view ([GEAR_VISIBILITY]) — that is theirs.
      */
@@ -41,6 +61,16 @@ object TurnGuards {
         if (silent && !method.startsWith("note.") && method !in GEAR_SILENT_OK) {
             throw IllegalStateException(
                 "A silent turn may only use the notebook (note.*); it must not touch the device: $method",
+            )
+        }
+        // A stranger-authored notification or an authenticated *remote* AI
+        // session is not direct evidence that the owner requested a call,
+        // text, calendar write, robot movement or permission escalation.
+        // Local owner-initiated turns keep their ORIGINAL SMS/call workflows.
+        if (untrusted && method in UNTRUSTED_DIRECT_ACTIONS) {
+            throw IllegalStateException(
+                "This action requires a new direct request from the device owner, " +
+                    "not a notification or remote Hub instruction: $method",
             )
         }
         // Whether adult (or finance, or health) apps are named to the model is the user's decision. A stranger's

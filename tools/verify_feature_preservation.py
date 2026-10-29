@@ -51,6 +51,12 @@ ALLOWED_CHANGES = {
     "app/src/androidTest/java/net/kuafuai/andee/acceptance/AndeeSafeSmokeTest.java",
     "tools/check_original_feature_contracts.py",
     "docs/PHASE5_FEATURE_ACCEPTANCE.md",
+    # Phase 6 narrow provenance gate: block direct sensitive tool execution
+    # only on remote Hub / stranger-authored turns. SMS/WhatsApp UI untouched.
+    "core/src/main/kotlin/net/kuafuai/andee/net/TurnGuards.kt",
+    "core/src/test/kotlin/net/kuafuai/andee/net/TurnGuardsTest.kt",
+    "tools/check_sensitive_turn_gates.py",
+    "docs/PHASE6_SENSITIVE_ACTION_GATE.md",
     "SECURITY.md",  # Written disclosure of known risks, not runtime code.
 }
 
@@ -152,11 +158,11 @@ for path, tokens in MUST_CONTAIN.items():
 # Original untouched code can contain unsafe operations or incomplete flows:
 # do not mislabel this file-identity check as security or end-to-end UX proof.
 preserved = len(base) - len([p for p in base if p in ALLOWED_CHANGES])
-# Nine original files may differ: CI, AGP, Gradle, three transport
-# entry points, hub settings/config UI, and SECURITY.md disclosure.
-# Every other baseline blob must be byte-for-byte identical.
+# Ten original files may differ: CI, AGP, Gradle, transport entry
+# points, hub settings/config, TurnGuards and SECURITY.md disclosure.
+# Other 425 baseline Git blobs must remain byte-for-byte unchanged.
 assert len(base) == 435, f"Original baseline inventory unexpectedly changed: {len(base)}"
-assert preserved >= 426, f"Original feature preservation threshold failed: {preserved}"
+assert preserved >= 425, f"Original feature preservation threshold failed: {preserved}"
 print(f"PASS: {preserved}/{len(base)} original Git blobs byte-for-byte unchanged;"
       f" no deleted source and {len(MUST_CONTAIN)} feature paths with core entry points")
 print("LIMITATION: WhatsApp/SMS draft, approval, sending and Android animation"

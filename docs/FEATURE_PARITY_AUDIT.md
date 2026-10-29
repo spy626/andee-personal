@@ -114,3 +114,28 @@ contract, not an end-to-end replay of a WhatsApp conversation.
 See `docs/PHASE5_FEATURE_ACCEPTANCE.md` for exact evidence, open risks and
 the future spare-phone acceptance plan. This does NOT certify use on the
 owner's primary Android device or close the prior sensitive-action risk.
+
+## Phase 6 — direct sensitive-action provenance gate (unmerged draft)
+
+- `TurnGuards` now mechanically refuses direct `device.sms.send`,
+  `device.dial`, `device.calendar.add`, permission escalation request,
+  external URL launch, alarm writes and physical robot commands during a
+  `TurnKind.NOTIFY` or other `untrusted` turn.
+- `BodyWsClient` treats every *authenticated remote Hub* command as
+  **untrusted source** too. The same restrictions apply before the Hub task
+  begins and again at the final dispatcher boundary. Hub signature proves
+  the server's identity, not user intent.
+- Original local owner-initiated `device.sms.send` remains exactly as before.
+  WhatsApp notification triage, original `CardUi`, `screen.tap`,
+  `screen.type`, `screen.submit_input` and `ui.ask` remain available on
+  notification turns for original proactive draft/reply behavior.
+- Security trade-off: optional remote Hub can no longer directly send SMS,
+  dial calls, modify calendar or control the robot even when signed. The
+  human must issue these through a fresh trusted device-local turn.
+  Original remote Hub wire messages and free adapter are unchanged.
+- **Known major limitation:** screen gestures can still click a real
+  in-app Send/Buy/Approve button, and extension-provided tools are not
+  classified here. Neither origin guard nor Hub identity alone prevents
+  indirect malicious UI automation. The Android accessibility actions,
+  SMS/WhatsApp live send behavior and owner-confirmation UX remain
+  unverified on a physical spare phone. Do not tag as main-phone-safe.

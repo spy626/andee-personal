@@ -180,6 +180,17 @@ class BodyWsClient(
             respondError(id, "unknown tool: $toolName", source)
             return
         }
+        // Signed Hub identity verifies a server, NOT that the device owner
+        // issued every instruction. Label every remote request as untrusted;
+        // this blocks vault/peer/scene direct writes and dangerous direct
+        // actuation while preserving screen/card actions for original chat.
+        val forbidden = runCatching {
+            TurnGuards.check(method, silent = false, untrusted = true)
+        }.exceptionOrNull()
+        if (forbidden != null) {
+            respondError(id, forbidden.message ?: "remote action denied", source)
+            return
+        }
         // A request on *this* socket is the brain driving, which is what the
         // edge glow announces. Marked here rather than in the dispatcher
         // because only the transport can tell the brain apart from the top-bar
@@ -192,7 +203,9 @@ class BodyWsClient(
             // trusted Hub session.
             if (conn !== source || !source.authenticated || !source.isOpen) return@execute
             val response = try {
-                val result = dispatcher.dispatch(method, params)
+                // Guard again at the final action boundary; no transport
+                // proof may relabel a remote Hub command as a live user turn.
+                val result = dispatcher.dispatch(method, params, untrusted = true)
                 JSONObject()
                     .put("type", "response")
                     .put("id", id)
