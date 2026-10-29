@@ -895,4 +895,15 @@
     <string name="window_input_hint">打字跟它说…</string>
     <string name="window_voice_on">朗读</string>
     <string name="window_muted">静音</string>
+    <string name="settings_nav_ai_voice">AI 与语音</string>
+    <string name="settings_nav_ai_voice_note">现有 AI 后端、API 密钥与语音服务</string>
+    <string name="settings_nav_appearance">外观与唤醒</string>
+    <string name="settings_nav_appearance_note">主题、角色表情与唤醒词</string>
+    <string name="settings_nav_memory">记忆与自主行动</string>
+    <string name="settings_nav_memory_note">小本本、通知与自主工作</string>
+    <string name="settings_nav_device">保险箱与工具</string>
+    <string name="settings_nav_device_note">指纹保护的保险箱与原有应用工具</string>
+    <string name="settings_nav_advanced">高级与诊断</string>
+    <string name="settings_nav_advanced_note">云端、键盘、诊断与恢复出厂设置</string>
+    <string name="settings_nav_back">返回设置</string>
 </resources>

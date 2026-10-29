@@ -170,6 +170,39 @@ class SettingsUi(
     /** Survives a [rebuild], so switching language doesn't re-hide the group. */
     private var advancedOpen = false
 
+    /** Phase 10A is navigation only: every existing control keeps its original owner. */
+    private enum class Page { HOME, AI_VOICE, APPEARANCE, MEMORY, DEVICE, ADVANCED }
+    private var page = Page.HOME
+    private var resetScrollForPage = false
+
+    /** Form views are rebuilt between pages; keep unsaved values until Save/Cancel. */
+    private val stagedFields = mutableMapOf<String, String>()
+    private val stagedPicks = mutableMapOf<String, String>()
+
+    private fun pageTitle(selected: Page): String = when (selected) {
+        Page.HOME -> lctx.getString(R.string.settings_title)
+        Page.AI_VOICE -> lctx.getString(R.string.settings_nav_ai_voice)
+        Page.APPEARANCE -> lctx.getString(R.string.settings_nav_appearance)
+        Page.MEMORY -> lctx.getString(R.string.settings_nav_memory)
+        Page.DEVICE -> lctx.getString(R.string.settings_nav_device)
+        Page.ADVANCED -> lctx.getString(R.string.settings_nav_advanced)
+    }
+
+    private fun navigateTo(next: Page) {
+        if (page == next) return
+        page = next
+        resetScrollForPage = true
+        rebuild()
+    }
+
+    private fun stageVisibleEdits() {
+        for ((key, view) in fields) stagedFields[key] = view.text?.toString().orEmpty()
+        for ((key, read) in picks) stagedPicks[key] = read()
+        // Newly built controls read this map. No stored preferences are changed
+        // unless the owner explicitly presses the existing Save button.
+        saved = saved + stagedFields + stagedPicks
+    }
+
     /**
      * The 诊断 section is showing the factory-reset warning instead of its
      * three buttons. Survives a [rebuild] so a language switch mid-confirmation
@@ -205,6 +238,9 @@ class SettingsUi(
         if (root != null) return
 
         saved = VoiceConfig.current(context)
+        stagedFields.clear()
+        stagedPicks.clear()
+        page = Page.HOME
         english = saved["lang"] == VoiceConfig.LANG_EN
         val p = WindowManager.LayoutParams(
             cardWidth(), cardHeight(),
@@ -255,7 +291,9 @@ class SettingsUi(
      */
     private fun rebuild() {
         val old = root ?: return
-        saved = saved + currentEdits()
+        stageVisibleEdits()
+        val changingPage = resetScrollForPage
+        resetScrollForPage = false
         // null means "the bottom", resolved once the new form has a height.
         // Not Int.MAX_VALUE: ScrollView.clamp() evaluates `viewport + y`, which
         // overflows to negative, skips the clamp and scrolls the form clean off
@@ -265,7 +303,9 @@ class SettingsUi(
             // list alone is five lines — so holding the old offset leaves its
             // 确认 row below the fold. 诊断 is the last section and the danger
             // zone is the last thing in it, so the bottom *is* the confirm.
-            if (clearChatConfirm || clearNotesConfirm || factoryConfirm) null else (scroll?.scrollY ?: 0)
+            if (changingPage) 0
+            else if (clearChatConfirm || clearNotesConfirm || factoryConfirm) null
+            else (scroll?.scrollY ?: 0)
         Glass.fadeOut(old) {
             if (root !== old) return@fadeOut
             fields.clear()
@@ -321,6 +361,9 @@ class SettingsUi(
         fields.clear()
         picks.clear()
         scroll = null
+        stagedFields.clear()
+        stagedPicks.clear()
+        page = Page.HOME
         Glass.exit(v) {
             if (closing === v) {
                 runCatching { wm.removeView(v) }
@@ -361,43 +404,103 @@ class SettingsUi(
             setPadding(dp(24), dp(4), dp(24), dp(24))
         }
 
-        // Split in two, and the split is the whole of item 5 of the review: the
-        // card used to be eleven sections in one flat column, in which the
-        // question "what can I actually set here" took a full scroll to answer
-        // because the answer was interleaved with endpoints and a factory-reset
-        // button. 常用 is what a person opens settings for; 高级 is everything
-        // that answers a question they have not asked yet.
-        //
-        // Order inside 常用 is by how early the errand comes up, not
-        // alphabetically: who does the thinking, then how it hears you, then
-        // what it is allowed to keep, then what it may interrupt you for, then
-        // the credentials it can spend. 大脑 stays first because it is the one
-        // setting that changes what the rest of the card means.
-        brainSection(form)
-        // 外观 is the only appearance setting left up here: 形象与表情 moved into 高级,
-        // so the "these two are the same kind of setting" argument went with it. What is
-        // left in 常用 is what a person opens settings to change.
-        // The same order as the Mac's settings page. 形象与表情, 装备 and 保险箱 are opened from here on both bodies;
-        // 小本本 and 朋友 have their own keys on the top bar (and the Mac's sidebar), so this card only holds
-        // the notebook's review settings and no door to the friends list.
-        themeSection(form)
-        expressionsSection(form)
-        wakeSection(form)
-        notebookSection(form)
-        gearSection(form)
-        notifySection(form)
-        nudgeSection(form)
-        driveSection(form)
-        vaultSection(form)
-        maxStepsSection(form)
-
-        advancedSection(form)
+        // Existing original controls are only *rearranged*, never rewritten.
+        // Brain and legacy voice remain together until Gemini Live has its own
+        // separately tested provider integration (Phase 10C).
+        when (page) {
+            Page.HOME -> settingsHome(form)
+            Page.AI_VOICE -> brainSection(form)
+            Page.APPEARANCE -> {
+                themeSection(form)
+                expressionsSection(form)
+                wakeSection(form)
+            }
+            Page.MEMORY -> {
+                notebookSection(form)
+                notifySection(form)
+                nudgeSection(form)
+                driveSection(form)
+                maxStepsSection(form)
+            }
+            Page.DEVICE -> {
+                vaultSection(form)
+                gearSection(form)
+            }
+            Page.ADVANCED -> {
+                showHubSection(form)
+                typingSection(form)
+                diagnosticsSection(form)
+            }
+        }
 
         sv.addView(form, matchWrap())
         card.addView(sv, LinearLayout.LayoutParams(MATCH, 0, 1f))
 
         card.addView(footerBar(), matchWrap())
         return card
+    }
+
+    /** The main page has only short routes; existing pages retain all controls. */
+    private fun settingsHome(form: LinearLayout) {
+        navigationRow(
+            form, Page.AI_VOICE, R.string.settings_nav_ai_voice,
+            R.string.settings_nav_ai_voice_note,
+        )
+        navigationRow(
+            form, Page.APPEARANCE, R.string.settings_nav_appearance,
+            R.string.settings_nav_appearance_note,
+        )
+        navigationRow(
+            form, Page.MEMORY, R.string.settings_nav_memory,
+            R.string.settings_nav_memory_note,
+        )
+        navigationRow(
+            form, Page.DEVICE, R.string.settings_nav_device,
+            R.string.settings_nav_device_note,
+        )
+        navigationRow(
+            form, Page.ADVANCED, R.string.settings_nav_advanced,
+            R.string.settings_nav_advanced_note,
+        )
+    }
+
+    private fun navigationRow(
+        form: LinearLayout,
+        destination: Page,
+        @StringRes titleRes: Int,
+        @StringRes noteRes: Int,
+    ) {
+        val row = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = Glass.panel(context, dp(20))
+            setPadding(dp(18), dp(14), dp(14), dp(14))
+            isClickable = true
+            isFocusable = true
+            contentDescription = lctx.getString(titleRes)
+            Glass.pressable(this)
+            setOnClickListener { navigateTo(destination) }
+        }
+        val labels = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        labels.addView(TextView(context).apply {
+            text = lctx.getString(titleRes)
+            textSize = Glass.Type.BODY
+            setTextColor(Color.parseColor(Glass.TITLE))
+        }, matchWrap())
+        labels.addView(TextView(context).apply {
+            text = lctx.getString(noteRes)
+            textSize = Glass.Type.CAPTION
+            setTextColor(Color.parseColor(Glass.SECONDARY))
+            setPadding(0, dp(4), 0, 0)
+        }, matchWrap())
+        row.addView(labels, LinearLayout.LayoutParams(0, WRAP, 1f))
+        row.addView(TextView(context).apply {
+            text = "›"
+            textSize = Glass.Type.TITLE
+            setTextColor(Color.parseColor(Glass.SECONDARY))
+            gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(dp(24), dp(36)))
+        form.addView(row, rowParams(dp(12)))
     }
 
     /**
@@ -488,8 +591,21 @@ class SettingsUi(
             setPadding(dp(28), dp(22), dp(18), dp(14))
         }
         val titles = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        if (page != Page.HOME) {
+            row.addView(TextView(context).apply {
+                text = "‹"
+                contentDescription = lctx.getString(R.string.settings_nav_back)
+                textSize = Glass.Type.TITLE
+                setTextColor(Color.parseColor(Glass.TITLE))
+                gravity = Gravity.CENTER
+                isClickable = true
+                isFocusable = true
+                Glass.pressable(this)
+                setOnClickListener { navigateTo(Page.HOME) }
+            }, LinearLayout.LayoutParams(dp(40), dp(44)))
+        }
         titles.addView(TextView(context).apply {
-            text = lctx.getString(R.string.settings_title)
+            text = pageTitle(page)
             // 21 was sized against the old, smaller card. On a card this wide
             // a 21sp title is the first thing that reads as undersized, and it
             // is the one line that has to carry the sheet's identity.
@@ -1916,18 +2032,12 @@ class SettingsUi(
 
     // ---- Data ----
 
-    /** What is on screen right now, saved or not. Used by [rebuild]. */
-    private fun currentEdits(): Map<String, String> {
-        val out = mutableMapOf<String, String>()
-        for ((k, et) in fields) out[k] = et.text?.toString().orEmpty()
-        for ((k, read) in picks) out[k] = read()
-        return out
-    }
-
+    /** Save all visited pages, including a key edited before navigating away. */
     private fun saveAndHide() {
+        stageVisibleEdits()
         val updates = mutableMapOf<String, String>()
-        for ((k, et) in fields) {
-            val v = et.text?.toString()?.trim().orEmpty()
+        for ((k, raw) in stagedFields) {
+            val v = raw.trim()
             // Overridable keys go in even when blank: blank is how the user
             // says "go back to the compiled default", and VoiceConfig.save()
             // deletes the pref when it sees one. Non-overridable keys only go
@@ -1940,7 +2050,7 @@ class SettingsUi(
         // Pickers go in unconditionally: their value is never blank, which is
         // what lets a setting actually be turned back off — VoiceConfig.save()
         // drops blank values, so a text field never could.
-        for ((k, read) in picks) updates[k] = read()
+        for ((k, value) in stagedPicks) updates[k] = value
         if (updates.isNotEmpty()) VoiceConfig.save(context, updates)
         hide()
     }
