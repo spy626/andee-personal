@@ -22,12 +22,41 @@ class FreeProviderGuardTest {
             FreeProviderGuard.XKIRO_QWEN))
     }
 
-    @Test fun remainingFreeTokensMustBeKnownAndSufficient() {
-        assertTrue(FreeProviderGuard.quotaIsVerifiedFree("""{"free_tokens":{"remaining":12000}}"""))
-        assertFalse(FreeProviderGuard.quotaIsVerifiedFree("""{"free_tokens":{"remaining":11999}}"""))
-        assertFalse(FreeProviderGuard.quotaIsVerifiedFree("""{"free_tokens":{"remaining":null}}"""))
-        assertFalse(FreeProviderGuard.quotaIsVerifiedFree("""{"free_tokens":{}}"""))
-        assertFalse(FreeProviderGuard.quotaIsVerifiedFree("""{}"""))
+    @Test fun quotaUsesDocumentedUnlimitedOrPositiveFreeAllowanceOnly() {
+        val free = """{"object":"usage","free_tokens":{"used_today":1,"limit_per_day":500000,"remaining":499999}}"""
+        val low = """{"object":"usage","free_tokens":{"used_today":499999,"limit_per_day":500000,"remaining":1}}"""
+        val unlimited = """{"object":"usage","free_tokens":{"used_today":25000,"limit_per_day":null,"remaining":null}}"""
+        assertTrue(FreeProviderGuard.quotaIsVerifiedFree(free))
+        assertTrue(FreeProviderGuard.quotaIsVerifiedFree(low))
+        assertTrue(FreeProviderGuard.quotaIsVerifiedFree(unlimited))
+        assertEquals(null, FreeProviderGuard.quotaProblem(unlimited))
+        assertEquals("free_quota_exhausted", FreeProviderGuard.quotaProblem(
+            """{"object":"usage","free_tokens":{"used_today":500000,"limit_per_day":500000,"remaining":0}}"""
+        ))
+        assertFalse(FreeProviderGuard.quotaIsVerifiedFree(
+            """{"object":"usage","free_tokens":{"used_today":5,"limit_per_day":null,"remaining":10}}"""
+        ))
+        assertFalse(FreeProviderGuard.quotaIsVerifiedFree(
+            """{"object":"usage","free_tokens":{"used_today":5,"limit_per_day":500,"remaining":null}}"""
+        ))
+        assertFalse(FreeProviderGuard.quotaIsVerifiedFree(
+            """{"object":"usage","free_tokens":{"used_today":5,"remaining":100}}"""
+        ))
+        assertFalse(FreeProviderGuard.quotaIsVerifiedFree(
+            """{"object":"usage","free_tokens":{"used_today":-1,"limit_per_day":null,"remaining":null}}"""
+        ))
+        assertFalse(FreeProviderGuard.quotaIsVerifiedFree("{}"))
+        assertFalse(FreeProviderGuard.quotaIsVerifiedFree("not-json"))
+    }
+
+    @Test fun groqErrorHintsAreSafeAndActionable() {
+        for (code in listOf(400, 401, 403, 404, 429, 503)) {
+            val hint = FreeProviderGuard.groqErrorHint(code)
+            assertTrue(hint.isNotBlank())
+            assertFalse(hint.contains("sk-"))
+        }
+        assertTrue(FreeProviderGuard.groqErrorHint(429).contains("limit"))
+        assertTrue(FreeProviderGuard.groqErrorHint(401).contains("API key"))
     }
 
     @Test fun catalogReasonsSeparateMissingModelFromUnsafePricingOrTools() {
@@ -60,7 +89,7 @@ class FreeProviderGuardTest {
             seen.add("${chain.request().method} ${chain.request().url.encodedPath}")
             val body = when (chain.request().url.encodedPath) {
                 "/v1/models" -> modelList
-                "/v1/usage" -> """{"free_tokens":{"remaining":100000}}"""
+                "/v1/usage" -> """{"object":"usage","free_tokens":{"used_today":1000,"limit_per_day":500000,"remaining":499000}}"""
                 else -> error("Unexpected URL")
             }
             okhttp3.Response.Builder()
@@ -113,7 +142,7 @@ class FreeProviderGuardTest {
             seen += "${chain.request().method} ${chain.request().url.encodedPath}"
             val reply = if (chain.request().url.encodedPath == "/v1/models")
                 """{"data":[{"id":"qwen/qwen3-vl-plus:free","access_tier":"free","capabilities":{"vision":true,"tools":true},"pricing":{"input":0,"output":0}},{"id":"cohere/command-a","access_tier":"free","capabilities":{"tools":true},"pricing":{"input":0,"output":0}}]}"""
-            else """{"free_tokens":{"remaining":12000}}"""
+            else """{"object":"usage","free_tokens":{"used_today":200,"limit_per_day":500000,"remaining":499800}}"""
             okhttp3.Response.Builder()
                 .request(chain.request()).protocol(okhttp3.Protocol.HTTP_1_1)
                 .code(200).message("OK")
