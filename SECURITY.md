@@ -254,3 +254,22 @@ remain unchanged. This is manually pinned authentication, not automatic
 QR pairing or a new phone-to-phone remote-control feature. A trusted but
 compromised Hub can still issue commands; prompt-injection and sensitive
 per-action owner authorization remain unresolved. **NOT MAIN-PHONE-READY.**
+
+## Recovery Phase 6: notification and remote Hub sensitive-action provenance
+
+The unmerged Phase 6 branch blocks **direct** SMS sending, phone dialing,
+calendar modification, permission escalation requests, external URL opens,
+alarm changes and physical robot movement from turns whose subject matter
+is untrusted. Remote Hub commands are also labeled untrusted on both
+network ingress and their final dispatcher call, even after successful
+signed Hub identity verification. Local owner-initiated SMS/call workflows
+are unchanged.
+
+This is intentionally a small control, not a full prompt-injection fix.
+Notification WhatsApp workflows still require `screen.*` and `ui.ask`,
+and those remain allowed; a malicious message could try to make
+screen-control click an irreversible button indirectly. Unknown
+extension tool methods can also have side effects. An authenticated Hub
+still sees screen/tool information and may exercise allowed screen actions.
+A secure, real-device-aware UI action authorization layer remains a blocker
+for primary-phone release.

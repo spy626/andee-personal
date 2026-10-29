@@ -21,6 +21,43 @@ class TurnGuardsTest {
     }
 
     @Test
+    fun `untrusted notifications and remote hub cannot perform direct irreversible actions`() {
+        val sensitive = listOf(
+            "device.sms.send", "device.dial", "device.calendar.add",
+            "device.permissions.request", "device.open_url", "device.alarm",
+            "dog.move", "dog.sequence", "dog.turn", "dog.speed",
+            "dog.pose", "dog.calibrate",
+        )
+        for (method in sensitive) {
+            val message = refused(method, untrusted = true)
+            org.junit.Assert.assertTrue(method, message.contains("device owner"))
+            // A direct owner voice/touch turn still keeps original behavior.
+            TurnGuards.check(method, silent = false, untrusted = false)
+        }
+    }
+
+    @Test
+    fun `original proactive WhatsApp screen and answer card tools stay available`() {
+        val replyTools = listOf(
+            "device.notifications", "device.launch",
+            "screen.ui_tree", "screen.tap", "screen.tap_target",
+            "screen.tap_id", "screen.type", "screen.submit_input",
+            "screen.wait", "ui.ask", "ui.alert", "tts.speak",
+        )
+        for (method in replyTools) {
+            TurnGuards.check(method, silent = false, untrusted = true)
+        }
+    }
+
+    @Test
+    fun `remote hub untrusted provenance preserves old vault and peer restrictions`() {
+        for (method in listOf("device.vault.fill", "peer.ask",
+                "scene.save", "scene.enter", "note.day_plan")) {
+            refused(method, untrusted = true)
+        }
+    }
+
+    @Test
     fun `a user turn may call anything`() {
         for (m in listOf("screen.tap", "device.vault.fill", "scene.enter", "note.todo")) {
             TurnGuards.check(m, silent = false, untrusted = false)
