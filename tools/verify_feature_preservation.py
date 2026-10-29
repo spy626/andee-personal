@@ -35,6 +35,13 @@ ALLOWED_CHANGES = {
     "app/src/androidTest/java/net/kuafuai/andee/acceptance/VaultScreenLockTest.java",
     "tools/check_vault_screen_lock.py",
     "docs/PHASE9_1_SCREEN_LOCK_REVOCATION.md",
+    # Phase 9.2: Settings panel safely handles biometric-locked Vault.
+    "app/src/main/java/net/kuafuai/andee/ui/SettingsUi.kt",
+    "app/src/main/res/values/strings.xml",
+    "app/src/main/res/values-en/strings.xml",
+    "app/src/androidTest/java/net/kuafuai/andee/acceptance/SettingsLockedVaultTest.kt",
+    "tools/check_vault_settings_safe.py",
+    "docs/PHASE9_2_SETTINGS_CRASH_FIX.md",
     "docs/PHASE8_V080_INTEGRATION.md",
     # Explicitly scoped transport fixes. Existing UI/messaging/tool
     # dispatch/voice/rendering source must remain byte-for-byte identical.
