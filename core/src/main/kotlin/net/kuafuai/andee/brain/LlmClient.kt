@@ -76,6 +76,8 @@ class LlmClient(
     @Volatile private var model = model
     @Volatile private var thinking = thinking
     @Volatile private var reasoningEffort = reasoningEffort
+    /** Auto stays on the last successful free model until a definite rejection. */
+    @Volatile private var autoStickyModel: String? = null
 
     /**
      * Change what the next request asks for, without touching the endpoint or
@@ -187,40 +189,74 @@ class LlmClient(
                     .put("prompt", 0).put("completion", 0)))
             }
         }
-        if (freeProvider == FreeProviderGuard.XKIRO) {
-            // Two read-only zero-cost GETs before EVERY inference POST.
-            // A catalog or quota failure prevents all messages/tools/screens
-            // from reaching xKiro; never fall back to any paid route.
-            FreeProviderGuard.preflightXKiro(http, apiKey, model)
-        }
-
-        val req = Request.Builder()
-            .url("$baseUrl/chat/completions")
-            .addHeader("Authorization", "Bearer $apiKey")
-            .addHeader("Content-Type", "application/json")
-            .post(body.toString().toRequestBody(JSON))
-            .build()
-
-        val call = http.newCall(req)
-        current = call
-        val text = try {
-            call.execute().use { resp ->
-                // Read the body either way: DeepSeek puts the useful part of an
-                // error (bad key, unknown model, context overflow) in the body,
-                // and a bare "HTTP 400" sends whoever is debugging to the wrong
-                // place entirely.
-                val raw = resp.body?.string().orEmpty()
-                if (resp.code in 300..399) {
-                    throw LlmMovedException(resp.code, resp.header("Location").orEmpty())
-                }
-                if (!resp.isSuccessful) {
-                    throw LlmHttpException(resp.code, raw)
-                }
-                raw
+        val autoXKiro = freeProvider == FreeProviderGuard.XKIRO &&
+            model == FreeProviderGuard.XKIRO_AUTO
+        val needsVision = messages.any { message ->
+            val content = message.optJSONArray("content") ?: return@any false
+            (0 until content.length()).any { n ->
+                content.optJSONObject(n)?.optString("type") == "image_url"
             }
-        } finally {
-            current = null
         }
+        val candidates: List<String> = if (autoXKiro) {
+            // Verified against the live xKiro catalog & free quota before
+            // ANY user message, screenshot or tool metadata reaches provider.
+            val eligible = FreeProviderGuard.preflightXKiroAuto(http, apiKey, needsVision)
+            val sticky = autoStickyModel?.takeIf { it in eligible }
+            if (sticky != null) listOf(sticky) + eligible.filterNot { it == sticky }
+            else eligible
+        } else {
+            if (freeProvider == FreeProviderGuard.XKIRO) {
+                FreeProviderGuard.preflightXKiro(http, apiKey, model)
+            }
+            listOf(model)
+        }
+
+        var resultText: String? = null
+        // Never attempt more than 3 xKiro free models in one complete() call.
+        // A 404/429 is a definite rejection; timeout/5xx/unknown failures
+        // remain non-retryable to avoid unsafe replay of private context.
+        for ((attempt, candidate) in candidates.take(if (autoXKiro) 3 else 1).withIndex()) {
+            if (autoXKiro && attempt > 0) {
+                // Before every retry POST, independently verify the fresh
+                // zero-cost catalog and free quota again.
+                if (candidate !in FreeProviderGuard.preflightXKiroAuto(
+                        http, apiKey, needsVision,
+                    )) continue
+            }
+            body.put("model", candidate) // never send "xkiro/auto-free" to gateway
+            val req = Request.Builder()
+                .url("$baseUrl/chat/completions")
+                .addHeader("Authorization", "Bearer $apiKey")
+                .addHeader("Content-Type", "application/json")
+                .post(body.toString().toRequestBody(JSON))
+                .build()
+            val call = http.newCall(req)
+            current = call
+            try {
+                call.execute().use { resp ->
+                    val raw = resp.body?.string().orEmpty()
+                    if (resp.code in 300..399) {
+                        throw LlmMovedException(resp.code, resp.header("Location").orEmpty())
+                    }
+                    if (!resp.isSuccessful) {
+                        // Same user-selected xKiro provider and same encrypted
+                        // key, never Groq/OpenRouter/DeepSeek or paid fallback.
+                        if (autoXKiro && FreeProviderGuard.autoRetryable(resp.code) &&
+                            attempt < 2 && attempt < candidates.size - 1) {
+                            return@use
+                        }
+                        throw LlmHttpException(resp.code, raw)
+                    }
+                    resultText = raw
+                    if (autoXKiro) autoStickyModel = candidate
+                }
+            } finally {
+                current = null
+            }
+            if (resultText != null) break
+        }
+        val text = resultText
+            ?: throw java.io.IOException("xKiro Auto free models unavailable; no paid fallback")
 
         // A 200 that is not JSON is a web server answering where the API should: a proxy page, a login wall.
         val root = runCatching { JSONObject(text) }.getOrElse {
