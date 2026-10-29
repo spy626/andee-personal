@@ -497,6 +497,7 @@ class CommandDispatcher(
             // `screen.` even though `fill` types: reading the vault is not
             // operating the device, and `fill` does its own folding below.
             "device.vault.list" -> {
+                net.kuafuai.andee.config.VaultBioGate.requireUnlocked(appContext)
                 val arr = org.json.JSONArray()
                 for (e in net.kuafuai.andee.config.Vault.entries(appContext)) {
                     val fields = org.json.JSONObject()
@@ -512,6 +513,7 @@ class CommandDispatcher(
                 JSONObject().put("entries", arr).put("count", arr.length())
             }
             "device.vault.get" -> {
+                net.kuafuai.andee.config.VaultBioGate.requireUnlocked(appContext)
                 val who = requireNotNull(params?.optString("entry")?.ifEmpty { null }) {
                     "device.vault.get requires entry"
                 }
@@ -536,6 +538,7 @@ class CommandDispatcher(
                 JSONObject().put("entry", e.label).put("field", field).put("value", value)
             }
             "device.vault.fill" -> {
+                net.kuafuai.andee.config.VaultBioGate.requireUnlocked(appContext)
                 ensureCompact()
                 window.pulseTool()
                 val who = requireNotNull(params?.optString("entry")?.ifEmpty { null }) {
