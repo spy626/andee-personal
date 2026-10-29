@@ -23,6 +23,14 @@ ALLOWED_CHANGES = {
     "docs/FEATURE_PARITY_AUDIT.md",
     "tools/verify_feature_preservation.py",
     "tools/check_v080_feature_integration.py",
+    # Phase 9 biometric-only Vault hardening. No general owner-approval redesign.
+    "app/src/main/java/net/kuafuai/andee/config/Vault.kt",
+    "app/src/main/java/net/kuafuai/andee/config/VaultBioGate.kt",
+    "app/src/main/java/net/kuafuai/andee/ui/VaultUnlockActivity.kt",
+    "app/src/main/java/net/kuafuai/andee/ui/VaultUi.kt",
+    "app/src/main/AndroidManifest.xml",
+    "tools/check_vault_biometric_only.py",
+    "docs/PHASE9_VAULT_BIOMETRIC_ONLY.md",
     "docs/PHASE8_V080_INTEGRATION.md",
     # Explicitly scoped transport fixes. Existing UI/messaging/tool
     # dispatch/voice/rendering source must remain byte-for-byte identical.
@@ -170,7 +178,10 @@ preserved = len(base) - len([p for p in base if p in ALLOWED_CHANGES])
 # The reviewed security paths may differ; all other v0.8.0 source and assets
 # must remain exactly the same as the original release.
 assert len(base) == 474, f"Upstream v0.8.0 baseline inventory unexpectedly changed: {len(base)}"
-assert preserved >= 474-14, f"v0.8.0 feature preservation threshold failed: {preserved}"
+# Phase 9 reviews three more original files (Vault, VaultUi, Manifest); 17
+# upstream paths are explicitly allowlisted in total. The
+# dedicated Phase 9 gate also compares every unrelated runtime file to Phase 8.
+assert preserved >= 457, f"v0.8.0 feature preservation threshold failed: {preserved}"
 unchanged = sum(base[p] == head[p] for p in base)
 print(f"PASS: {unchanged}/{len(base)} upstream v0.8.0 Git blobs byte-for-byte unchanged;"
       f" no deleted source and {len(MUST_CONTAIN)} feature paths with core entry points")

@@ -45,6 +45,7 @@ jobs:
       - run: python3 tools/check_sensitive_turn_gates.py
       - run: python3 tools/check_untrusted_screen_and_extension.py
       - run: python3 tools/check_v080_feature_integration.py
+      - run: python3 tools/check_vault_biometric_only.py
 
       - uses: actions/upload-artifact@v4
         with:
@@ -54,6 +55,19 @@ jobs:
           # carried four copies of it. See the `splits` block in app/build.gradle.
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+  # Source-only gate: runs without Maven/Gradle downloads so a temporary
+  # third-party mirror outage cannot obscure whether feature parity passed.
+  vault-source-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: python3 tools/verify_feature_preservation.py
+      - run: python3 tools/check_original_feature_contracts.py
+      - run: python3 tools/check_v080_feature_integration.py
+      - run: python3 tools/check_vault_biometric_only.py
 
   # assembleRelease is its own job rather than a step above, because it is a
   # *gate* and not a deliverable: the APK has no signingConfig and cannot be

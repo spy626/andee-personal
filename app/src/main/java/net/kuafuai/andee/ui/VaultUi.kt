@@ -2,6 +2,9 @@ package net.kuafuai.andee.ui
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
+import net.kuafuai.andee.config.VaultBioGate
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.text.InputType
@@ -40,6 +43,17 @@ class VaultUi(
         context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
     private var root: View? = null
+    private val lockWatcher = Handler(Looper.getMainLooper())
+    private val watchLock = object : Runnable {
+        override fun run() {
+            if (root == null) return
+            if (!VaultBioGate.ready(context)) {
+                hide()
+            } else {
+                lockWatcher.postDelayed(this, 1_000L)
+            }
+        }
+    }
 
     /** Null = the list; non-null = editing this entry (blank id = new). */
     private var editing: Vault.Entry? = null
@@ -61,6 +75,29 @@ class VaultUi(
 
     fun show() {
         if (root != null) return
+        // Only the credential Vault asks for a biometric unlock. Everything
+        // else Andee does (SMS, WhatsApp, taps, autonomous work) is unchanged.
+        if (!VaultBioGate.ready(context)) {
+            VaultBioGate.request(context) { allowed ->
+                Handler(Looper.getMainLooper()).post {
+                    if (allowed) show()
+                    else android.widget.Toast.makeText(
+                        context, "Vault needs a strong fingerprint on this phone",
+                        android.widget.Toast.LENGTH_LONG,
+                    ).show()
+                }
+            }
+            return
+        }
+        // If the Keystore key is invalidated or migration fails, show an error
+        // rather than crashing the assistant or silently displaying an empty Vault.
+        if (runCatching { Vault.entries(context) }.isFailure) {
+            android.widget.Toast.makeText(
+                context, "Vault unlock failed; saved credentials were not erased",
+                android.widget.Toast.LENGTH_LONG,
+            ).show()
+            return
+        }
         val p = WindowManager.LayoutParams(
             cardWidth(), cardHeight(),
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
@@ -78,12 +115,16 @@ class VaultUi(
             root = v
             OwnCard.shown()
             Glass.enter(v)
+            lockWatcher.removeCallbacks(watchLock)
+            lockWatcher.postDelayed(watchLock, 1_000L)
         }
     }
 
     fun hide() {
         val v = root ?: return
+        lockWatcher.removeCallbacks(watchLock)
         root = null
+        editing = null
         Glass.exit(v) {
             runCatching { wm.removeView(v) }
             OwnCard.hidden()
@@ -271,7 +312,16 @@ class VaultUi(
             setTextColor(Color.parseColor(Glass.DANGER))
             setPadding(dp(12), dp(6), dp(4), dp(6))
             isClickable = true
-            setOnClickListener { Vault.remove(context, entry.id); rebuild() }
+            setOnClickListener {
+                runCatching { Vault.remove(context, entry.id) }
+                    .onSuccess { rebuild() }
+                    .onFailure {
+                        android.widget.Toast.makeText(
+                            context, "Vault is locked; account was not deleted",
+                            android.widget.Toast.LENGTH_LONG,
+                        ).show()
+                    }
+            }
         })
         return row
     }
@@ -337,7 +387,8 @@ class VaultUi(
                     label.error = lctx.getString(R.string.vault_error_name_required)
                     return@button
                 }
-                Vault.put(
+                val saved = runCatching {
+                    Vault.put(
                     context,
                     Vault.Entry(
                         id = entry.id.ifBlank { Vault.newId() },
@@ -355,7 +406,15 @@ class VaultUi(
                         cardCvv = cardCvv.text.toString().filter(Char::isDigit),
                         cardHolder = cardHolder.text.toString().trim(),
                     ),
-                )
+                    )
+                }
+                if (saved.isFailure) {
+                    android.widget.Toast.makeText(
+                        context, "Vault save failed; stored credentials are unchanged",
+                        android.widget.Toast.LENGTH_LONG,
+                    ).show()
+                    return@button
+                }
                 editing = null
                 rebuild()
             })
