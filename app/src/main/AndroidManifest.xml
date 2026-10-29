@@ -213,6 +213,14 @@
             </intent-filter>
         </activity>
 
+        <!-- Local-only Android system biometric prompt for credential Vault.
+             Not available to external apps; not a general action approval. -->
+        <activity
+            android:name=".ui.VaultUnlockActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true"
+            android:exported="false" />
+
         <activity
             android:name=".device.PermissionRequestActivity"
             android:theme="@style/Theme.Body"
