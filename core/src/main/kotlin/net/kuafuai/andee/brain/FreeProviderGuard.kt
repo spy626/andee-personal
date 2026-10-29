@@ -31,6 +31,17 @@ object FreeProviderGuard {
     const val GROQ_20B = "openai/gpt-oss-20b"
     const val OPENROUTER_AUTO = "openrouter/free"
 
+    /** No server response body (which could echo prompts or secrets) in UI errors. */
+    fun groqErrorHint(status: Int): String = when (status) {
+        400 -> "request or tool format rejected; check model/tool compatibility"
+        401 -> "API key rejected; check the Groq key in Settings"
+        402, 403 -> "account/model access denied; verify free-plan eligibility"
+        404 -> "model not available for this Groq key"
+        429 -> "free plan rate/token limit reached; do not switch to paid"
+        in 500..599 -> "Groq server unavailable; no automatic retry or paid fallback"
+        else -> "request unsuccessful; no automatic paid fallback"
+    }
+
     fun models(provider: String): List<String> = when (provider) {
         XKIRO -> listOf(XKIRO_AUTO, XKIRO_QWEN)
         GROQ -> listOf(GROQ_120B, GROQ_20B)
