@@ -42,6 +42,10 @@ ALLOWED_CHANGES = {
     "app/src/androidTest/java/net/kuafuai/andee/acceptance/SettingsLockedVaultTest.kt",
     "tools/check_vault_settings_safe.py",
     "docs/PHASE9_2_SETTINGS_CRASH_FIX.md",
+    # Phase 10A: clean Settings navigation only; no ordinary AI/voice runtime edits.
+    "app/src/androidTest/java/net/kuafuai/andee/acceptance/SettingsNavigationTest.kt",
+    "tools/check_settings_navigation.py",
+    "docs/PHASE10A_SETTINGS_NAVIGATION.md",
     "docs/PHASE8_V080_INTEGRATION.md",
     # Explicitly scoped transport fixes. Existing UI/messaging/tool
     # dispatch/voice/rendering source must remain byte-for-byte identical.
