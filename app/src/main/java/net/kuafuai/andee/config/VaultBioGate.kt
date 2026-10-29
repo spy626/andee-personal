@@ -75,7 +75,9 @@ object VaultBioGate {
             accepted = success
             done.countDown()
         }
-        if (!done.await(70, TimeUnit.SECONDS) || !accepted || !ready(context)) {
+        // Smaller than Andee's 60s tool timeout and remote request budget:
+        // never type a secret AFTER the caller has abandoned this tool.
+        if (!done.await(20, TimeUnit.SECONDS) || !accepted || !ready(context)) {
             throw IllegalStateException("Vault biometric unlock was cancelled, unavailable or timed out")
         }
     }
