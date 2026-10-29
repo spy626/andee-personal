@@ -40,6 +40,7 @@ jobs:
       - run: python3 tools/verify_feature_preservation.py
       - run: python3 tools/check_network_transport.py
       - run: python3 tools/check_local_connection_consent.py
+      - run: python3 tools/check_signed_hub_identity.py
 
       - uses: actions/upload-artifact@v4
         with:

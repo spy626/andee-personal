@@ -33,6 +33,13 @@ ALLOWED_CHANGES = {
     "core/src/main/kotlin/net/kuafuai/andee/net/LocalPeerConsent.kt",
     "core/src/test/kotlin/net/kuafuai/andee/net/LocalPeerConsentTest.kt",
     "tools/check_local_connection_consent.py",
+    # Narrow signed remote-Hub identity handshake and owner-pinned public key UI.
+    "app/src/main/java/net/kuafuai/andee/config/VoiceConfig.kt",
+    "app/src/main/java/net/kuafuai/andee/ui/SettingsUi.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/net/HubIdentity.kt",
+    "core/src/test/kotlin/net/kuafuai/andee/net/HubIdentityTest.kt",
+    "tools/check_signed_hub_identity.py",
+    "docs/HUB_SIGNED_IDENTITY_PROTOCOL.md",
     "SECURITY.md",  # Written disclosure of known risks, not runtime code.
 }
 
@@ -122,6 +129,9 @@ MUST_CONTAIN = {
     "core/src/main/kotlin/net/kuafuai/andee/net/NetworkPolicy.kt": (
         "fun isSecureHubUrl(", '"wss"',
     ),
+    "core/src/main/kotlin/net/kuafuai/andee/net/HubIdentity.kt": (
+        "fun isValidPinnedKey(", "fun newChallenge(", "fun verify(",
+    ),
 }
 for path, tokens in MUST_CONTAIN.items():
     data = (ROOT / path).read_text(encoding="utf-8")
@@ -131,10 +141,11 @@ for path, tokens in MUST_CONTAIN.items():
 # Original untouched code can contain unsafe operations or incomplete flows:
 # do not mislabel this file-identity check as security or end-to-end UX proof.
 preserved = len(base) - len([p for p in base if p in ALLOWED_CHANGES])
-# Seven original files may differ: CI, AGP, Gradle, three transport
-# entry points and SECURITY.md risk disclosure. Everything else must be exact.
+# Nine original files may differ: CI, AGP, Gradle, three transport
+# entry points, hub settings/config UI, and SECURITY.md disclosure.
+# Every other baseline blob must be byte-for-byte identical.
 assert len(base) == 435, f"Original baseline inventory unexpectedly changed: {len(base)}"
-assert preserved >= 428, f"Original feature preservation threshold failed: {preserved}"
+assert preserved >= 426, f"Original feature preservation threshold failed: {preserved}"
 print(f"PASS: {preserved}/{len(base)} original Git blobs byte-for-byte unchanged;"
       f" no deleted source and {len(MUST_CONTAIN)} feature paths with core entry points")
 print("LIMITATION: WhatsApp/SMS draft, approval, sending and Android animation"
