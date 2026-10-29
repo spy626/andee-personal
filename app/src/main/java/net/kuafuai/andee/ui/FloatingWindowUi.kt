@@ -111,6 +111,15 @@ import kotlin.random.Random
  * booted shows the card rather than a corner ball. See
  * `BodyCoreService.onServiceConnected`.
  */
+/** Kept pure so device tests can prove a folded/pass-through ball never steals Back. */
+internal object FullscreenBackPolicy {
+    fun claimsBack(
+        compact: Boolean, typingActivityOpen: Boolean, typingTop: Int,
+        gesturePassthrough: Boolean, captureHidden: Boolean, away: Boolean,
+    ): Boolean = !compact && !typingActivityOpen && typingTop == 0 &&
+        !gesturePassthrough && !captureHidden && !away
+}
+
 class FloatingWindowUi(
     private val context: Context,
     private val listeners: Listeners,
@@ -320,8 +329,10 @@ class FloatingWindowUi(
     private var backCallback: android.window.OnBackInvokedCallback? = null
 
     private fun shouldHandleBack(): Boolean =
-        !compact && !backPassthroughForTyping && typingTop == 0 &&
-            !gesturePassthrough && !captureHidden && !away
+        FullscreenBackPolicy.claimsBack(
+            compact, backPassthroughForTyping, typingTop,
+            gesturePassthrough, captureHidden, away,
+        )
 
     private fun minimizeOnAndroidBack() {
         if (shouldHandleBack()) listeners.onMinimizeClick()
