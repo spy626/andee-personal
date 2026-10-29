@@ -1875,17 +1875,6 @@ class FloatingWindowUi(
             homeY = p.y
         }
         runCatching { wm.updateViewLayout(v, p) }
-        // The attached focusable overlay receives gesture-Back (API 33+) or
-        // KEYCODE_BACK (older/OEM devices); on compact/typing, unregister.
-        syncAndroidBackRegistration()
-        if (shouldHandleBack()) {
-            v.post {
-                if (root === v && shouldHandleBack()) {
-                    v.requestFocus()
-                    syncAndroidBackRegistration()
-                }
-            }
-        }
     }
 
     /**
@@ -2420,6 +2409,17 @@ class FloatingWindowUi(
         // controls the user cannot do without.
         insetTopBar()
         runCatching { wm.updateViewLayout(v, p) }
+        // The attached focusable overlay receives gesture-Back (API 33+) or
+        // KEYCODE_BACK (older/OEM devices); on compact/typing, unregister.
+        syncAndroidBackRegistration()
+        if (shouldHandleBack()) {
+            v.post {
+                if (root === v && shouldHandleBack()) {
+                    v.requestFocus()
+                    syncAndroidBackRegistration()
+                }
+            }
+        }
     }
 
     /**
