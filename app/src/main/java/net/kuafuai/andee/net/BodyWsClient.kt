@@ -85,7 +85,9 @@ class BodyWsClient(
             return
         }
         if (!running.compareAndSet(false, true)) return
-        Log.i(TAG, "starting hub client → $url  (device=$deviceId '$deviceName')")
+        // The Hub URL can contain a high-entropy access capability in its path.
+        // Never write that URL or path to Android logs.
+        Log.i(TAG, "starting authenticated remote Hub client (device=$deviceId)")
         scheduleConnect(0)
     }
 
@@ -113,7 +115,8 @@ class BodyWsClient(
             conn = c
             c.connect()
         } catch (t: Throwable) {
-            Log.e(TAG, "connect failed: ${t.message}", t)
+            // A URI exception may embed the Hub bearer-capability path.
+            Log.e(TAG, "remote Hub connect failed (${t.javaClass.simpleName})")
             onDisconnected()
         }
     }
@@ -308,7 +311,8 @@ class BodyWsClient(
         }
 
         override fun onClose(code: Int, reason: String?, remote: Boolean) {
-            Log.i(TAG, "onClose code=$code reason=$reason remote=$remote")
+            // Do not log server-provided reason: it may echo a secret URL path.
+            Log.i(TAG, "remote Hub disconnected code=$code remote=$remote")
             if (conn === this) {
                 conn = null
                 if (current === this@BodyWsClient) current = null
@@ -317,7 +321,8 @@ class BodyWsClient(
         }
 
         override fun onError(ex: Exception?) {
-            Log.w(TAG, "onError ${ex?.message}")
+            // Network errors can contain full WebSocket URI credentials.
+            Log.w(TAG, "remote Hub error (${ex?.javaClass?.simpleName})")
         }
     }
 

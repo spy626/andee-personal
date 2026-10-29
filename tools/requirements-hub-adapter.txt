@@ -1,0 +1,3 @@
+# Free/open source, pinned for reproducible CI. Not an online paid API.
+websockets==16.0
+cryptography==46.0.4
