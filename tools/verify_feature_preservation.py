@@ -46,6 +46,11 @@ ALLOWED_CHANGES = {
     "tools/tests/test_hub_signed_adapter.py",
     "tools/requirements-hub-adapter.txt",
     "tools/check_hub_adapter.py",
+    # Phase 5 tests/docs ONLY: never authorize SMS/WhatsApp or touch production
+    # notification, card, voice and mascot implementations.
+    "app/src/androidTest/java/net/kuafuai/andee/acceptance/AndeeSafeSmokeTest.java",
+    "tools/check_original_feature_contracts.py",
+    "docs/PHASE5_FEATURE_ACCEPTANCE.md",
     "SECURITY.md",  # Written disclosure of known risks, not runtime code.
 }
 

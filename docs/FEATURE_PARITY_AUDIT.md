@@ -94,3 +94,23 @@ acceptance. Recovery branch remains **not safe for a main phone**.
   Hub workflows require that adapter and live integration acceptance before
   calling feature parity complete. Session identity does not prevent malicious
   instructions from a compromised but authenticated Hub.
+
+## Phase 5 acceptance gates — emulator and source, not personal phone
+
+New isolated test-only `app/src/androidTest/.../AndeeSafeSmokeTest.java`
+checks the first-run Self-check activity, original system-bound notification
+listener/Accessibility service permissions, the original SMS **permission denied**
+path (explicitly refuses to run on a device with SEND_SMS enabled), CardUi's
+answer result, and all 19 mascot moods backed by faces. No real SMS or
+WhatsApp message is sent, no API keys are configured and no sensitive access
+is granted. An Android 11 x86_64 Google APIs emulator runs it in CI;
+`:app:connectedDebugAndroidTest` failures are not bypassed.
+
+`tools/check_original_feature_contracts.py` asserts original WhatsApp
+notification triage/card action, original SMS tool/permission check, and
+voice/mascot source entry points still exist. It is explicitly a source
+contract, not an end-to-end replay of a WhatsApp conversation.
+
+See `docs/PHASE5_FEATURE_ACCEPTANCE.md` for exact evidence, open risks and
+the future spare-phone acceptance plan. This does NOT certify use on the
+owner's primary Android device or close the prior sensitive-action risk.
