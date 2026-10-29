@@ -807,7 +807,7 @@ class SettingsUi(
         // ---- 本机 tab: LLM + 火山 voice rows ----
         val localBlock = block(panel)
         val legacyLlmBlock = block(localBlock)
-        freeProviderSection(localBlock, legacyLlmBlock) {
+        freeProviderSection(panel, legacyLlmBlock) {
             // A deliberately chosen free provider uses the original LocalBrain.
             pickBrain(VoiceConfig.BRAIN_LOCAL)
         }
