@@ -84,6 +84,7 @@ class LocalBrain(
         model = cfg.model,
         thinking = cfg.thinking,
         reasoningEffort = cfg.reasoningEffort,
+        freeProvider = cfg.freeProvider,
     )
 
     /**
