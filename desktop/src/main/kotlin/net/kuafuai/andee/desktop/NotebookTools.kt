@@ -19,11 +19,26 @@ object DesktopNotebook {
     @Volatile var storeOverride: net.kuafuai.andee.config.NotebookStore? = null
 
     val book: NotebookBook by lazy {
-        NotebookBook(storeOverride ?: EncryptedFileStore(AppDirs.file("notebook.enc"), "notebook-key"))
+        NotebookBook(storeOverride ?: EncryptedFileStore(AppDirs.file("notebook.enc"), "notebook-key")).apply {
+            localWikiStore = net.kuafuai.andee.wiki.LocalWikiStore(AppDirs.file("wiki"))
+        }
     }
 
     /** Directions and day plans, in the same book. One instance: its lock serialises the tool and the settings page. */
     val plans: net.kuafuai.andee.config.Plans by lazy { net.kuafuai.andee.config.Plans(book) }
+
+    /** What it did of its own accord today, counted by the device. One instance: its lock serialises writes. */
+    val drive: net.kuafuai.andee.config.Drive by lazy { net.kuafuai.andee.config.Drive(book) }
+
+    /** For [LifeTools.callId]: the tool call id (set at call time); a diary page may point at today's work turns' calls. */
+    @Volatile var callBeingRun: String = ""
+    val life by lazy {
+        net.kuafuai.andee.config.LifeTools(book.selfhood, book.people, book.wiki, callId = { callBeingRun })
+            .apply { todaysCalls = { drive.todaysCalls() } }
+    }
+
+    /** 「让它歇着」: unset is on, anything unreadable is off — the phone's `VoiceConfig.driveEnabled`. */
+    fun driveEnabled(): Boolean = when (Settings.get("drive").trim()) { "", "on" -> true; else -> false }
 }
 
 /** Local-time formats the model writes todos in — the same list the phone accepts. */
@@ -120,9 +135,20 @@ class NotebookTools(private val onSceneChanged: (String?) -> Unit) {
 
     fun handles(method: String) = method.startsWith("note.") || method.startsWith("scene.")
 
-    fun dispatch(method: String, p: JSONObject, silent: Boolean, untrusted: Boolean): Any = when (method) {
-        // The plan (`Plans`): shared logic in core; here only the timers it asks for.
-        "note.directions", "note.day_plan" -> {
+    fun dispatchCall(method: String, p: JSONObject, callId: String, silent: Boolean, untrusted: Boolean): Any {
+        DesktopNotebook.callBeingRun = callId
+        return when (method) {
+            // Andee's inner life (`LifeTools`): also shared logic, no side effects on the desktop. Every
+            // call's tool_call_id must be noted on write operations, so they can be pointed at. Filled at launch.
+            in net.kuafuai.andee.config.LifeTools.METHODS -> DesktopNotebook.life.handle(method, p).also { r ->
+                // wiki_write show=true: open what was just written — not from a quiet turn, where nobody asked to see it.
+                if (method == "note.wiki_write" && p.optBoolean("show") && !silent && r.optBoolean("written")) {
+                    r.optJSONObject("meta")?.optString("id")?.takeIf { it.isNotEmpty() }?.let { Assistant.openScreen("wiki:$it"); r.put("shown", true) }
+                }
+            }
+
+            // The plan (`Plans`): shared logic in core; here only the timers it asks for.
+            "note.directions", "note.day_plan" -> {
             val r = DesktopNotebook.plans.handle(method, p, Nudges.level().perDay)
             if (method == "note.day_plan") DesktopScheduler.syncPlan()
             r
@@ -230,7 +256,11 @@ class NotebookTools(private val onSceneChanged: (String?) -> Unit) {
         }
 
         else -> throw IllegalArgumentException("unknown method $method")
+        }
     }
+
+    /** dispatch before callId existed; stays for older tests. */
+    fun dispatch(method: String, p: JSONObject, silent: Boolean, untrusted: Boolean): Any = dispatchCall(method, p, "", silent, untrusted)
 
     private fun setScene(name: String?) {
         if (Settings.get("scene") == (name ?: "")) return
@@ -245,6 +275,7 @@ class NotebookTools(private val onSceneChanged: (String?) -> Unit) {
 
     private fun todo(p: JSONObject, untrusted: Boolean): JSONObject {
         val what = req(p, "what", "note.todo")
+        NotebookBook.bundledTodo(what)?.let { throw IllegalArgumentException(it) }
         val atRaw = p.optString("at").trim()
         val cronRaw = p.optString("cron").trim()
         require(atRaw.isNotEmpty() != cronRaw.isNotEmpty()) {

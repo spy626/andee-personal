@@ -89,6 +89,28 @@ interface BrainHost {
     fun planIndex(): String = ""
 
     /**
+     * Is the todo [id] still meant to run? Asked when its turn is about to start — after any wait for the user to be
+     * quiet and any queue behind another turn — so a todo paused, done or dropped in the meantime does not run.
+     * Default true: a host without todos has nothing to say.
+     */
+    fun todoStillActive(id: String): Boolean = true
+
+    /** Every memory and pending todo, for a review to check before it writes ([NotebookBook.recordForReview]). */
+    fun reviewRecord(): String = ""
+
+    /** One line of who I am and what is pulling at me (`Selfhood`). Empty for a host without it. */
+    fun selfIndex(): String = ""
+
+    /** One line of what is in the wiki (`WikiBook`). Empty for a host without one. */
+    fun wikiIndex(): String = ""
+
+    /**
+     * The tools a [LocalBrain.TurnKind.WORK] turn may use in [territory]. The default is everything: a turn Andee
+     * starts itself has what a turn the user asked for has (see [SelfWork]).
+     */
+    fun workTools(territory: String?): List<JSONArray> = toolLists()
+
+    /**
      * One line naming the other Andees this one can ask (see `PeerTasks`), empty when it has none. Without it the
      * model answers "do you have friends" from nothing; a default, so a host without friends changes by not a byte.
      */
@@ -117,7 +139,11 @@ interface BrainHost {
      * the turn, and the implementation must refuse what they forbid — see
      * [net.kuafuai.andee.net.TurnGuards].
      */
-    fun dispatch(method: String, params: org.json.JSONObject, silent: Boolean, untrusted: Boolean): Any?
+    /**
+     * Dispatch a tool call to the host's handler. [callId] is the tool_call_id from the LLM; it must be
+     * recorded on any write operation so diary entries and care logs can point at what did it.
+     */
+    fun dispatch(method: String, params: org.json.JSONObject, callId: String, silent: Boolean, untrusted: Boolean): Any?
 
     /**
      * Why the current turn is running, set by the brain before its tools run.
@@ -125,6 +151,9 @@ interface BrainHost {
      * turn from a todo that fired while nobody may be at the screen.
      */
     fun turnStarted(kind: String) {}
+
+    /** Something happened that is not conversation — see [BrainEvent]. Any thread. Default: nowhere to show it. */
+    fun event(e: BrainEvent) {}
 
     /** Where the trace file lives. */
     fun traceDir(): File

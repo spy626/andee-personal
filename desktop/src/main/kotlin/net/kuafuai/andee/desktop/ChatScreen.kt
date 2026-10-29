@@ -43,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -119,7 +120,7 @@ private fun openLink(url: String) {
 
 @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
-fun ChatScreen(onOpenArtifacts: () -> Unit, onOpenTopic: (Long) -> Unit = {}, onContinueTopic: (Scrollback.Topic) -> Unit = {}, onOpenSettings: () -> Unit = {}) {
+fun ChatScreen(onOpenArtifacts: () -> Unit, onOpenTopic: (Long) -> Unit = {}, onContinueTopic: (Scrollback.Topic) -> Unit = {}, onOpenSettings: () -> Unit = {}, onOpenWiki: (String) -> Unit = {}) {
     var rows by remember { mutableStateOf(Scrollback.snapshot()) }
     var progress by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
@@ -129,11 +130,14 @@ fun ChatScreen(onOpenArtifacts: () -> Unit, onOpenTopic: (Long) -> Unit = {}, on
     var pending by remember { mutableStateOf(Assistant.pending) }
     val attached = remember { androidx.compose.runtime.mutableStateListOf<Attachment>().apply { addAll(ChatPreview.attachments) } }
     var dropping by remember { mutableStateOf(false) }
+    var wechat by remember { mutableStateOf(System.getProperty("andee.shot.wechat") == "1") }
     var muted by remember { mutableStateOf(Assistant.muted) }
     var recording by remember { mutableStateOf(Meeting.isActive()) }
     // A folded stretch is one card standing where its messages stood — the phone's rule, so the
     // conversation still reads top to bottom. The sidebar's topic list is only another way in.
-    val items = remember(rows) { chatItems(rows) }
+    // 全部 shows what happened as well as what was said; 只看对话 hides the event rows. Remembered across launches.
+    var showEvents by remember { mutableStateOf(Settings.get("timeline_events") != "off") }
+    val items = remember(rows, showEvents) { chatItems(if (showEvents) rows else rows.filter { it.role != Scrollback.Role.EVENT }) }
     // The list is created already standing on the newest message. Opening the page used to start at the top
     // and then animate down through the whole conversation, which read as the chat scrolling itself on every
     // visit. (An item that is taller than the viewport is shown from its start, so a long last reply is read
@@ -239,6 +243,8 @@ fun ChatScreen(onOpenArtifacts: () -> Unit, onOpenTopic: (Long) -> Unit = {}, on
     Column(Modifier.fillMaxSize()) {
         Header(
             muted = muted, onToggleMute = { Assistant.setMuted(!muted) },
+            showEvents = showEvents,
+            onToggleEvents = { showEvents = !showEvents; Settings.save(mapOf("timeline_events" to if (showEvents) "on" else "off")) },
             live = recording || voice == net.kuafuai.andee.desktop.voice.MacVoice.State.LISTENING,
             status = when {
                 recording -> if (Strings.lang() == "zh") "正在录音" else "Recording"
@@ -267,7 +273,7 @@ fun ChatScreen(onOpenArtifacts: () -> Unit, onOpenTopic: (Long) -> Unit = {}, on
                 }
                 items(items, key = { it.key }) { it ->
                     when (it) {
-                        is ChatItem.Message -> Bubble(it.row)
+                        is ChatItem.Message -> if (it.row.role == Scrollback.Role.EVENT) EventRow(it.row, onOpenWiki) else Bubble(it.row)
                         is ChatItem.Folded -> TopicCard(it.topic, it.count, onOpen = { onOpenTopic(it.topic.id) }, onContinue = { onContinueTopic(it.topic) })
                     }
                 }
@@ -329,8 +335,11 @@ fun ChatScreen(onOpenArtifacts: () -> Unit, onOpenTopic: (Long) -> Unit = {}, on
             )
             Box(Modifier.clickable { openLink(GITHUB_URL) }.padding(horizontal = 5.dp, vertical = 2.dp)) { Icon(AndeeIcon.GITHUB, Palette.photoInk, 13.dp) }
             Box(Modifier.clickable { openLink(DISCORD_URL) }.padding(horizontal = 5.dp, vertical = 2.dp)) { Icon(AndeeIcon.DISCORD, Palette.photoInk, 13.dp) }
+            // WeChat is not a link: it shows Andee's QR code, to add it as a friend.
+            Box(Modifier.clickable { wechat = true }.padding(horizontal = 5.dp, vertical = 2.dp)) { Icon(AndeeIcon.WECHAT, Palette.photoInk, 13.dp) }
         }
     }
+    if (wechat) WeChatQr(onDone = { wechat = false })
     if (dropping) {
         Box(
             Modifier.fillMaxSize().padding(10.dp)
@@ -346,7 +355,7 @@ fun ChatScreen(onOpenArtifacts: () -> Unit, onOpenTopic: (Long) -> Unit = {}, on
 
 /** Title, or a one-line status when something is live. Stop is with the input box, where the hand already is. */
 @Composable
-private fun Header(status: String?, live: Boolean, muted: Boolean, onToggleMute: () -> Unit) {
+private fun Header(status: String?, live: Boolean, muted: Boolean, onToggleMute: () -> Unit, showEvents: Boolean = true, onToggleEvents: () -> Unit = {}) {
     Row(
         Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -356,12 +365,17 @@ private fun Header(status: String?, live: Boolean, muted: Boolean, onToggleMute:
             Spacer(Modifier.width(8.dp))
         }
         Text(
-            status ?: (if (Strings.lang() == "zh") "对话" else "Chat"),
+            status ?: (if (Strings.lang() == "zh") "动态" else "Timeline"),
             color = if (live) Palette.accent else Palette.title,
             fontSize = 18.sp, fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.weight(1f))
         val zh = Strings.lang() == "zh"
+        Text(
+            if (showEvents) (if (zh) "全部" else "Everything") else (if (zh) "只看对话" else "Talk only"),
+            color = Palette.label, fontSize = 12.sp,
+            modifier = Modifier.clip(RoundedCornerShape(16.dp)).clickable { onToggleEvents() }.padding(horizontal = 10.dp, vertical = 6.dp),
+        )
         Row(
             Modifier.clip(RoundedCornerShape(16.dp)).clickable { onToggleMute() }.padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -560,6 +574,46 @@ fun noVoiceKey() = when {
     else -> "No voice key yet: add it under Voice in Settings."
 }
 
+/**
+ * Something that happened, not something said: one quiet line with the time, a mark and the words. A row with a
+ * detail opens on click. Centered and small, so a day of events does not drown the conversation between them.
+ */
+@Composable
+private fun EventRow(r: Scrollback.Row, onOpenWiki: (String) -> Unit = {}) {
+    var open by remember(r.id) { mutableStateOf(false) }
+    val time = remember(r.ts) { java.text.SimpleDateFormat("HH:mm", java.util.Locale.US).format(java.util.Date(r.ts)) }
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        Row(
+            Modifier.clip(RoundedCornerShape(12.dp))
+                .then(if (r.detail.isNotBlank()) Modifier.clickable { open = !open } else Modifier)
+                .padding(horizontal = 10.dp, vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(time, color = Palette.secondary, fontSize = 11.sp)
+            Spacer(Modifier.width(8.dp))
+            Icon(TimelineEvents.mark(r.kind), Palette.secondary, 12.dp)
+            Spacer(Modifier.width(6.dp))
+            Text(r.text, color = Palette.photoInk, fontSize = 12.sp, maxLines = if (open) 4 else 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 520.dp))
+            if (r.detail.isNotBlank()) {
+                Spacer(Modifier.width(4.dp))
+                Text(if (open) "▴" else "▾", color = Palette.secondary, fontSize = 10.sp)
+            }
+            // A wiki article it wrote or showed: the row is the way in, the way a page has its card.
+            if (r.ref.isNotBlank() && r.kind.startsWith("WIKI")) {
+                Spacer(Modifier.width(8.dp))
+                Text(if (Strings.lang() == "zh") "打开 ›" else "Open ›", color = Palette.accent, fontSize = 12.sp,
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onOpenWiki(r.ref) }.padding(horizontal = 4.dp, vertical = 1.dp))
+            }
+        }
+        if (open && r.detail.isNotBlank()) {
+            Markdown(r.detail, color = Palette.photoInk, size = 12.sp,
+                modifier = Modifier.widthIn(max = 560.dp).padding(top = 2.dp, bottom = 4.dp)
+                    .background(Palette.glass, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp))
+        }
+    }
+}
+
 @Composable
 private fun Bubble(r: Scrollback.Row) {
     val mine = r.role == Scrollback.Role.USER
@@ -614,3 +668,38 @@ private fun Modifier.fadeTop(height: androidx.compose.ui.unit.Dp): Modifier = th
         )
     }
 
+
+/** Andee's WeChat QR code over the conversation; a click outside it or on ✕ closes it. */
+@Composable
+private fun WeChatQr(onDone: () -> Unit) {
+    val zh = Strings.lang() == "zh"
+    val img: androidx.compose.ui.graphics.ImageBitmap? = remember { wechatQr() }
+    Box(
+        Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)).clickable(onClick = onDone),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            Modifier.widthIn(max = 340.dp).background(Palette.cardSolid, RoundedCornerShape(22.dp)).border(1.dp, Palette.hairline, RoundedCornerShape(22.dp)).clickable(enabled = false) {}.padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(if (zh) "加 Andee 为微信好友" else "Add Andee on WeChat", color = Palette.title, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                Box(Modifier.clickable(onClick = onDone).padding(6.dp)) { Icon(AndeeIcon.CLOSE, Palette.secondary, 14.dp) }
+            }
+            Spacer(Modifier.height(12.dp))
+            if (img != null) {
+                androidx.compose.foundation.Image(img, contentDescription = "WeChat QR",
+                    modifier = Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(14.dp)).padding(6.dp))
+            }
+            Spacer(Modifier.height(12.dp))
+            Text(if (zh) "用微信扫码，添加 Andee 为好友" else "Scan with WeChat to add Andee as a friend", color = Palette.label, fontSize = 13.sp)
+        }
+    }
+}
+
+private object WeChatQrImage
+
+private fun wechatQr(): androidx.compose.ui.graphics.ImageBitmap? = runCatching {
+    val bytes = WeChatQrImage::class.java.getResourceAsStream("/wechat_qr.png")!!.use { it.readBytes() }
+    org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap()
+}.getOrNull()

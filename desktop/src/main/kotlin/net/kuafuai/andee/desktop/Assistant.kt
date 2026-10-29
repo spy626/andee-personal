@@ -50,7 +50,7 @@ object Assistant {
         net.kuafuai.andee.desktop.shell.ShellTools(
             ask = { askApproval(it) },
             secrets = { secrets() },
-            record = { line -> Scrollback.add(Scrollback.Role.ASSISTANT, line) },
+            record = { line -> TimelineEvents.body(TimelineEvents.Body.SHELL, line) },
         )
     }
 
@@ -132,14 +132,18 @@ object Assistant {
     }
 
     private fun providers(): List<DesktopBrainHost.ToolProvider> {
-        val notes = NotebookTools { onSceneChanged(it) }
+        val notes = NotebookTools { name ->
+            onSceneChanged(name)
+            // Entering and leaving a scene is a row in the timeline, as on the phone.
+            TimelineEvents.scene(name?.let { DesktopNotebook.book.scene(it)?.title ?: it })
+        }
         return listOf(
             UiTools(),
             MeetingTools(),
             object : DesktopBrainHost.ToolProvider {
                 override fun handles(method: String) = notes.handles(method)
-                override fun dispatch(method: String, p: JSONObject, silent: Boolean, untrusted: Boolean) =
-                    notes.dispatch(method, p, silent, untrusted)
+                override fun dispatch(method: String, p: JSONObject, callId: String, silent: Boolean, untrusted: Boolean) =
+                    notes.dispatchCall(method, p, callId, silent, untrusted)
             },
             shell,
             screen,
@@ -155,7 +159,7 @@ object Assistant {
      */
     private val peerTools = object : DesktopBrainHost.ToolProvider {
         override fun handles(method: String) = method.startsWith("peer.")
-        override fun dispatch(method: String, p: JSONObject, silent: Boolean, untrusted: Boolean): Any =
+        override fun dispatch(method: String, p: JSONObject, callId: String, silent: Boolean, untrusted: Boolean): Any =
             Peers.tasks.dispatch(method, p)
         override fun extraTools() =
             if (Peers.store.all().isNotEmpty()) net.kuafuai.andee.peer.PeerTasks.TOOLS else org.json.JSONArray()
@@ -477,6 +481,12 @@ object Assistant {
         }
     }
 
+    /** Bring the window up on a screen (`wiki:<id>`, …). Set by the window once it exists; any thread. */
+    @Volatile var openScreen: (String) -> Unit = {}
+
+    /** The brain as built, if it is; never builds one. For the heartbeat, which must not wake a brain nobody is using. */
+    fun built(): LocalBrain? = brain
+
     fun working(): Boolean = brain?.isBusy() == true || net.kuafuai.andee.desktop.voice.MacVoice.isSpeaking()
 
     /**
@@ -486,10 +496,15 @@ object Assistant {
      */
     private fun interruptForNewRequest() = stop()
 
-    /** The user's stop: the turn ends, and every command it started ends with it. */
+    /**
+     * The user's stop: everything ends — the turn, every turn queued behind it and every wake still waiting to
+     * start (`LocalBrain.stopAll`, which also puts what was cut off in the timeline), every command it started,
+     * the voice, and the bubble.
+     */
     fun stop() {
         cancelPending()
-        brain?.cancel()
+        brain?.stopAll()
+        Nudges.dismiss()
         guest?.cancel()
         shell.stopAll()
         net.kuafuai.andee.desktop.voice.MacVoice.stopSpeaking()
@@ -505,7 +520,9 @@ object Assistant {
         override fun tell(n: JSONObject, line: String) {
             // No turn and no task light: the sentence is already written, nothing is being driven.
             val clean = net.kuafuai.andee.brain.SpeechMood.parse(line).text.trim()
-            Scrollback.add(Scrollback.Role.ASSISTANT, clean)
+            // An event, not a line of conversation: a lone Andee bubble among the timeline's event rows read as it
+            // talking to nobody. The row names the app; the original message is the detail.
+            TimelineEvents.told(n.optString("app").ifEmpty { "?" }, clean, n.optString("latest").ifEmpty { n.optString("text") })
             onFinal(clean)
             if (!muted) net.kuafuai.andee.desktop.voice.MacVoice.speak(line)
         }
@@ -530,6 +547,7 @@ object Assistant {
         DesktopScheduler.catchUp()
         DesktopScheduler.syncPlan()
         PlanTicks.start()
+        VersionCheck.remindAtLaunch()
     }
 
     /**
@@ -550,11 +568,15 @@ object Assistant {
         wakeBrain(todo)
     }
 
-    private fun wakeBrain(todo: net.kuafuai.andee.config.Todo) = whenQuiet("wake-${todo.id}") {
-        // busy() is the window's "working" light: only turn it on when a turn really starts, not when
-        // the wake-up is merely parked behind another one.
-        if (brain?.isBusy() != true) busy(true)
-        ensure().wake(dueText(todo), untrusted = todo.untrusted)
+    private fun wakeBrain(todo: net.kuafuai.andee.config.Todo) {
+        // Taken before the wait: a tap on the ball while it waits means this one must not start (LocalBrain.wake).
+        val epoch = ensure().stopEpochNow()
+        whenQuiet("wake-${todo.id}") {
+            // busy() is the window's "working" light: only turn it on when a turn really starts, not when
+            // the wake-up is merely parked behind another one.
+            if (epoch == ensure().stopEpochNow() && brain?.isBusy() != true) busy(true)
+            ensure().wake(dueText(todo), untrusted = todo.untrusted, epoch = epoch)
+        }
     }
 
     /**

@@ -342,8 +342,20 @@ class BodyCoreService : Service() {
                 dispatcher.compactForUser()
             }
 
+            override fun onWikiOpen(id: String) {
+                net.kuafuai.andee.ui.NotebookUi(this@BodyCoreService, startWiki = id).show()
+            }
+
+            override fun onWeChatClick() {
+                net.kuafuai.andee.ui.WeChatQrUi(this@BodyCoreService).show()
+            }
+
             override fun onNotebookClick() {
-                net.kuafuai.andee.ui.NotebookUi(this@BodyCoreService) {}.show()
+                net.kuafuai.andee.ui.NotebookUi(
+                    this@BodyCoreService,
+                    // 打算 → 告诉它一句: an ordinary typed turn, so the model adjusts its own plan.
+                    onTellBrain = { text -> ui.post { submitUserTurn(text, "typed") } },
+                ).show()
             }
 
             override fun onFriendsClick() {
@@ -532,7 +544,7 @@ class BodyCoreService : Service() {
             onMute = { n ->
                 net.kuafuai.andee.config.VoiceConfig.muteNudgeKind(this, n.kind)
                 // The user's setting just changed, by a gesture with no confirmation; they are owed the news.
-                net.kuafuai.andee.ui.ChatHistory.addAssistant(AppLocale.str(this, R.string.nudge_muted_row, n.text))
+                net.kuafuai.andee.ui.PhoneTimeline.body(net.kuafuai.andee.ui.PhoneTimeline.Body.BUBBLE_MUTED, AppLocale.str(this, R.string.nudge_muted_row, n.text))
             },
         )
         // The signboard's only source of work. Its listener is a separate
@@ -2028,8 +2040,6 @@ class BodyCoreService : Service() {
             // and the pinned tips live in this service and have to be told.
             // See FloatingWindowUi.onLocaleChanged.
             onLocaleChanged = { window.onLocaleChanged() },
-            // 它的打算 → 告诉它一句: an ordinary typed turn, so the model adjusts its own plan.
-            onTellBrain = { text -> ui.post { submitUserTurn(text, "typed") } },
         )
         settings = s
         s.show()
@@ -2187,7 +2197,8 @@ class BodyCoreService : Service() {
         ui.post {
             val nb = net.kuafuai.andee.config.Notebook
             if (left != null) {
-                net.kuafuai.andee.ui.ChatHistory.addAssistant(
+                net.kuafuai.andee.ui.PhoneTimeline.body(
+                    net.kuafuai.andee.ui.PhoneTimeline.Body.SCENE,
                     AppLocale.str(this, R.string.scenes_exited_row, nb.scene(this, left)?.title ?: left),
                 )
                 // Leaving inside a trigger app must stick until the user goes
@@ -2196,7 +2207,8 @@ class BodyCoreService : Service() {
                 if (entered == null) sceneSuppressedPkg = sceneLastPkg
             }
             if (entered != null) {
-                net.kuafuai.andee.ui.ChatHistory.addAssistant(
+                net.kuafuai.andee.ui.PhoneTimeline.body(
+                    net.kuafuai.andee.ui.PhoneTimeline.Body.SCENE,
                     AppLocale.str(this, R.string.scenes_entered_row, nb.scene(this, entered)?.title ?: entered),
                 )
             }
@@ -2490,10 +2502,11 @@ class BodyCoreService : Service() {
             AppLocale.str(this, R.string.svc_stopped),
             FloatingWindowUi.SubtitleKind.FINAL,
         )
-        // The local brain is the one layer that genuinely stops: it drops the
-        // turn and aborts the HTTP call in flight. A tool already dispatched
-        // still runs to completion, same as over the hub.
-        localBrain?.cancel()
+        // The local brain stops everything: the turn, the HTTP call in flight, every turn queued behind it and
+        // any wake still waiting to start — and says in the timeline what was cut off. A tool already dispatched
+        // still runs to completion (a tap is instant; a wait returns early through cancelTask above).
+        localBrain?.stopAll()
+        net.kuafuai.andee.ui.NudgeUi.dismissAll()
         // Off the UI thread: WebSocket send blocks once the outbound buffer
         // fills. Silently dropped when no hub is connected, which degrades to
         // "stopped locally" — the right outcome for server-only mode.
@@ -2963,8 +2976,10 @@ class BodyCoreService : Service() {
         // aloud, the question card waiting on them, or the mic open for their next sentence. Bounded, so a
         // card nobody answers cannot hold an alarm back forever (it times out on its own well inside this).
         // Off the main thread: this is called from the alarm receiver's path and must not block it.
+        // Taken before the wait: a tap on the ball while it waits means this one must not start (LocalBrain.wake).
+        val epoch = brain.stopEpochNow()
         waitForQuiet {
-            wakeBrainFor(brain, todo)
+            wakeBrainFor(brain, todo, epoch)
         }
     }
 
@@ -3102,20 +3117,19 @@ class BodyCoreService : Service() {
     }
 
     /**
-     * Think about the plan if it is time to ([net.kuafuai.andee.brain.PlanMind]). Only with someone in front of
-     * the screen — a plan written to an empty room is decided without the one fact that matters, that they
-     * are here — and only for the local brain. The muse also needs them not busy with us, and a level that
-     * allows a bubble at all; the morning look does not, because writing a plan interrupts nobody.
+     * Think about the plan, and about what it cares about, if it is time to ([net.kuafuai.andee.brain.PlanMind],
+     * [net.kuafuai.andee.brain.Heartbeat]). **Not gated on the user being there, or on the hour**: the device is
+     * Andee's own, and it gets up for its own reasons; the user's brakes are the switches in settings and a tap on
+     * the ball. Only for the local brain, and the muse and the heartbeat wait while a turn of any kind is running.
      * Main thread; the work goes to [planExec].
      */
     private fun planTick() {
         if (exitRequested || localBrain == null) return
         val cfg = net.kuafuai.andee.config.VoiceConfig.brainConfig(this)
         if (cfg.apiKey.isEmpty()) return
-        val power = getSystemService(android.os.PowerManager::class.java)
-        val keyguard = getSystemService(android.app.KeyguardManager::class.java)
-        if (power?.isInteractive != true || keyguard?.isKeyguardLocked == true) return
         val free = !dispatcher.isTaskActive() && !audio.isStreamPlaying() && !asr.isActive() && !meeting.isActive()
+        val brain = localBrain
+        val drive = net.kuafuai.andee.config.VoiceConfig.driveEnabled(this)
         planExec.execute {
             val plans = net.kuafuai.andee.config.Notebook.plans(this)
             val mind = net.kuafuai.andee.brain.PlanMind(cfg, plans) { warn, msg ->
@@ -3123,13 +3137,44 @@ class BodyCoreService : Service() {
             }
             val lang = net.kuafuai.andee.config.VoiceConfig.uiLanguage(this)
             val level = net.kuafuai.andee.brain.NudgeBook.Level.of(net.kuafuai.andee.config.VoiceConfig.nudgeLevel(this))
-            if (mind.morning(lang, level.perDay)) net.kuafuai.andee.config.Scheduler.syncPlan(this)
+            if (mind.morning(lang, level.perDay)) {
+                net.kuafuai.andee.config.Scheduler.syncPlan(this)
+                net.kuafuai.andee.ui.PhoneTimeline.morning(this, plans.day(plans.today())?.intent.orEmpty())
+            }
             if (free && level != net.kuafuai.andee.brain.NudgeBook.Level.OFF) {
                 mind.muse(lang)?.let { id ->
                     plans.bubbleForItem(id, dispatcher.nudgeBook, level, net.kuafuai.andee.config.VoiceConfig.nudgeMuted(this))
                         ?.let(net.kuafuai.andee.ui.NudgeUi::post)
                 }
             }
+            if (free && drive && brain != null && !brain.isBusy()) heartbeat(cfg, brain, plans, lang)
+        }
+    }
+
+    /**
+     * Is anything on its mind worth getting up for ([net.kuafuai.andee.brain.Heartbeat])? Rides the plan tick:
+     * same presence check, same worker, and the beat keeps its own pace (about every 20 minutes) and budget. A
+     * `work` verdict starts a quiet turn of its own ([net.kuafuai.andee.brain.SelfWork]): no voice, no screen,
+     * and one scrollback row when it is done, so what it did is never invisible. [planExec] only.
+     */
+    private fun heartbeat(
+        cfg: net.kuafuai.andee.config.BrainConfig,
+        brain: net.kuafuai.andee.brain.LocalBrain,
+        plans: net.kuafuai.andee.config.Plans,
+        lang: String,
+    ) {
+        val self = net.kuafuai.andee.config.Notebook.selfhood(this)
+        val drive = net.kuafuai.andee.config.Notebook.drive(this)
+        val log: (Boolean, String) -> Unit = { warn, msg -> if (warn) android.util.Log.w("Drive", msg) else android.util.Log.i("Drive", msg) }
+        val v = net.kuafuai.andee.brain.Heartbeat(cfg, self, drive, { plans.indexForPrompt() }, log).beat(lang)
+        if (v is net.kuafuai.andee.brain.Heartbeat.Verdict.Note) net.kuafuai.andee.ui.PhoneTimeline.thought(this, v.text)
+        if (v !is net.kuafuai.andee.brain.Heartbeat.Verdict.Work) return
+        log(false, "work on ${v.care.id} (${v.care.what}): ${v.why}")
+        net.kuafuai.andee.ui.PhoneTimeline.workStarted(this, v.care.what, v.why)
+        net.kuafuai.andee.brain.SelfWork.start(brain, self, drive, v.care, v.ratio, v.why) { effect, summary ->
+            log(false, "work on ${v.care.id} booked as $effect")
+            val text = summary?.let { net.kuafuai.andee.brain.SpeechMood.parse(it).text.trim() }
+            net.kuafuai.andee.ui.PhoneTimeline.workDone(this, v.care.what, effect.name, text)
         }
     }
 
@@ -3153,23 +3198,17 @@ class BodyCoreService : Service() {
      *
      * Everything here is a reason to *hold* it, never to drop it — the bubble's own TTL decides when waiting
      * stops being worth it. The first group is [waitForQuiet]'s own (the user is mid-exchange); then the
-     * device being busy for them (a task, a meeting, typing); then the user being somewhere else (screen off,
-     * locked, Do Not Disturb, the night). Full-screen video and games are **not** detected yet.
+     * device being busy (a task, a meeting, typing). **Not whether the user is there, or the hour**: the device is
+     * Andee's, and the user's brakes are the 主动招呼 setting and its budget. Do Not Disturb is the one exception —
+     * a system switch the user set for exactly this.
      */
     private fun nudgeGate(): net.kuafuai.andee.ui.NudgeUi.Gate {
         val wait = net.kuafuai.andee.ui.NudgeUi.Gate.WAIT
         if (exitRequested || !window.isShown()) return wait
         if (net.kuafuai.andee.ui.CardUi.isCardUp() || audio.isStreamPlaying() || asr.isActive()) return wait
         if (dispatcher.isTaskActive() || meeting.isActive() || net.kuafuai.andee.ui.TextInputActivity.isShowing) return wait
-        val power = getSystemService(android.os.PowerManager::class.java)
-        if (power != null && !power.isInteractive) return wait
-        val keyguard = getSystemService(android.app.KeyguardManager::class.java)
-        if (keyguard != null && keyguard.isKeyguardLocked) return wait
         val nm = getSystemService(android.app.NotificationManager::class.java)
         if (nm != null && nm.currentInterruptionFilter > android.app.NotificationManager.INTERRUPTION_FILTER_ALL) return wait
-        val now = java.util.Calendar.getInstance()
-        val minute = now.get(java.util.Calendar.HOUR_OF_DAY) * 60 + now.get(java.util.Calendar.MINUTE)
-        if (net.kuafuai.andee.brain.NudgeBook.isQuiet(minute)) return wait
         return if (window.isCompact()) net.kuafuai.andee.ui.NudgeUi.Gate.SHOW else net.kuafuai.andee.ui.NudgeUi.Gate.LOG
     }
 
@@ -3214,11 +3253,12 @@ class BodyCoreService : Service() {
         }.apply { isDaemon = true; name = "wake-wait" }.start()
     }
 
-    private fun wakeBrainFor(brain: net.kuafuai.andee.brain.LocalBrain, todo: net.kuafuai.andee.config.Todo) {
+    private fun wakeBrainFor(brain: net.kuafuai.andee.brain.LocalBrain, todo: net.kuafuai.andee.config.Todo, epoch: Int = brain.stopEpochNow()) {
         // Prompt, not display: [notifyPageClosed] on why the model-facing set is English and what that costs.
         brain.wake(
             net.kuafuai.andee.brain.WakeText.due(todo.id, todo.what, todo.untrusted),
             untrusted = todo.untrusted,
+            epoch = epoch,
         )
     }
 
@@ -3609,6 +3649,7 @@ class BodyCoreService : Service() {
                     "Body",
                     "notification ignored: ${n.optString("app")} — ${verdict.why}",
                 )
+                net.kuafuai.andee.ui.PhoneTimeline.ignored(this, n.optString("app").ifEmpty { "?" }, verdict.why)
             }
 
             net.kuafuai.andee.brain.NotificationTriage.Action.TELL -> {
@@ -3643,10 +3684,8 @@ class BodyCoreService : Service() {
      */
     private fun tellAboutNotification(n: JSONObject, line: String) {
         val script = SpeechMood.parse(line)
-        net.kuafuai.andee.ui.ChatHistory.addUser(
-            AppLocale.str(this, R.string.svc_notification_auto_line, n.optString("app"))
-        )
-        net.kuafuai.andee.ui.ChatHistory.addAssistant(script.text)
+        // One event row, not a made-up user line plus an assistant answer: nobody said anything, a message came in.
+        net.kuafuai.andee.ui.PhoneTimeline.told(this, n.optString("app").ifEmpty { "?" }, script.text, n.optString("latest").ifEmpty { n.optString("text") })
         lastAnswer = script.text
         expectFollowUp = false
         if (!meeting.isActive() && !net.kuafuai.andee.device.CallState.isActive) {

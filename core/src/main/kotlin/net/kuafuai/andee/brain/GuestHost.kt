@@ -36,18 +36,21 @@ class GuestHost(private val inner: BrainHost) : BrainHost by inner {
     /** Not forwarded: the owner's own turn state (the Mac's command policy) must not be moved by a guest. */
     override fun turnStarted(kind: String) {}
 
+    /** A friend's task leaves no trace in the owner's timeline beyond the report itself. */
+    override fun event(e: BrainEvent) {}
+
     override fun toolLists(): List<JSONArray> = inner.toolLists().map { list ->
         JSONArray().also { out -> for (i in 0 until list.length()) list.optJSONObject(i)?.takeIf { allowed(it.optString("method")) }?.let(out::put) }
     }
 
     override fun methodOf(toolName: String): String? = inner.methodOf(toolName)?.takeIf(::allowed)
 
-    override fun dispatch(method: String, params: JSONObject, silent: Boolean, untrusted: Boolean): Any? {
+    override fun dispatch(method: String, params: JSONObject, callId: String, silent: Boolean, untrusted: Boolean): Any? {
         check(allowed(method)) {
             "This is a request from a friend's Andee, so only the screen, asking the owner and showing a page are open: " +
                 "$method is not. Say in your report what you could not do."
         }
-        return inner.dispatch(method, params, silent, untrusted = true)
+        return inner.dispatch(method, params, callId, silent, untrusted = true)
     }
 
     override fun traceDir(): File = inner.traceDir()

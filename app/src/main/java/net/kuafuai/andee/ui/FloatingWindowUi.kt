@@ -173,6 +173,12 @@ class FloatingWindowUi(
          */
         fun onOpenCommunityLink(url: String) {}
 
+        /** The WeChat glyph beside them: Andee's QR code ([WeChatQrUi]). */
+        fun onWeChatClick() {}
+
+        /** 打开 › on a timeline row: the wiki article it names. */
+        fun onWikiOpen(id: String) {}
+
         /** The 小本本 key — what it remembers. See [NotebookUi]. */
         fun onNotebookClick() {}
 
@@ -317,6 +323,14 @@ class FloatingWindowUi(
     private var muteKey: View? = null
     private var inputPill: View? = null
     private var muteLabel: TextView? = null
+
+    /** 全部 / 只看对话 beside the ball; shown and hidden with the 朗读 key. */
+    private var eventsKey: TextView? = null
+
+    private fun paintEventsKey() {
+        val on = historyView?.showEvents ?: net.kuafuai.andee.config.VoiceConfig.timelineEvents(context)
+        eventsKey?.text = AppLocale.str(context, if (on) R.string.tl_show_all else R.string.tl_show_talk)
+    }
     private var mutedNow = false
 
     /** Reflect the 朗读 / 静音 setting on the speaker key. Any thread. */
@@ -336,7 +350,10 @@ class FloatingWindowUi(
      * sits after; the tap hands the URL out through
      * [Listeners.onOpenCommunityLink], which is the host's trip to make.
      */
-    private fun communityLink(res: Int, url: String, label: String): View {
+    private fun communityLink(res: Int, url: String, label: String): View =
+        communityGlyph(res, label) { listeners.onOpenCommunityLink(url) }
+
+    private fun communityGlyph(res: Int, label: String, onClick: () -> Unit): View {
         val icon = ImageView(context).apply {
             setImageResource(res)
             setColorFilter(Color.parseColor(Glass.PHOTO_INK))
@@ -348,7 +365,7 @@ class FloatingWindowUi(
             setPadding(dp(7), dp(4), dp(7), dp(4))
             isClickable = true
             Glass.pressable(this)
-            setOnClickListener { listeners.onOpenCommunityLink(url) }
+            setOnClickListener { onClick() }
             addView(icon, LinearLayout.LayoutParams(dp(16), dp(16)))
         }
     }
@@ -1061,6 +1078,7 @@ class FloatingWindowUi(
             tipsText?.text = AppLocale.str(context, R.string.window_tips)
             inputHint?.text = AppLocale.str(context, R.string.window_input_hint)
             paintMute()
+            paintEventsKey()
             historyView?.onLocaleChanged()
             renderSceneChip()
         }
@@ -1923,6 +1941,7 @@ class FloatingWindowUi(
         topBarView?.visibility = View.GONE
         sceneChip?.visibility = View.GONE
         muteKey?.visibility = View.GONE
+        eventsKey?.visibility = View.GONE
         // Not just invisible — GONE, so the ball area has the whole window to
         // itself. A scrollback left in the layout would cover most of a 168dp
         // square and there would be nothing left to see the ball in.
@@ -2005,9 +2024,23 @@ class FloatingWindowUi(
         val cy = ballH / 2f + ty + d * 0.707f
         val left = (cx - kw / 2f).toInt()
         val top = (cy - kh / 2f).toInt()
-        if (lp.leftMargin == left && lp.topMargin == top) return
-        lp.leftMargin = minOf(left, w - kw - dp(8)); lp.topMargin = top
-        key.layoutParams = lp
+        if (!(lp.leftMargin == left && lp.topMargin == top)) {
+            lp.leftMargin = minOf(left, w - kw - dp(8)); lp.topMargin = top
+            key.layoutParams = lp
+        }
+        // 全部 / 只看对话: the same spot mirrored to the lower left, and visible whenever 朗读 is.
+        val ev = eventsKey ?: return
+        ev.visibility = key.visibility
+        val elp = ev.layoutParams as? FrameLayout.LayoutParams ?: return
+        if (ev.width == 0) ev.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
+        val ew = if (ev.width > 0) ev.width else ev.measuredWidth
+        val eh = if (ev.height > 0) ev.height else ev.measuredHeight
+        val ecx = w / 2f - d * 0.707f - dp(16)
+        val eleft = maxOf((ecx - ew / 2f).toInt(), dp(8))
+        val etop = (cy - eh / 2f).toInt()
+        if (elp.leftMargin == eleft && elp.topMargin == etop) return
+        elp.leftMargin = eleft; elp.topMargin = etop
+        ev.layoutParams = elp
     }
 
     /**
@@ -2219,6 +2252,7 @@ class FloatingWindowUi(
         topBarView?.visibility = View.VISIBLE
         sceneChip?.visibility = if (sceneTitle != null) View.VISIBLE else View.GONE
         muteKey?.visibility = View.VISIBLE
+        eventsKey?.visibility = View.VISIBLE
         historyView?.visibility = View.VISIBLE
         tipsView?.visibility = View.VISIBLE
         backdrop?.visibility = View.VISIBLE
@@ -2486,6 +2520,8 @@ class FloatingWindowUi(
             }
             onTopicContinue = { listeners.onTopicContinue(it) }
             onTopicTranscript = { listeners.onTopicTranscript(it) }
+            onWikiOpen = { listeners.onWikiOpen(it) }
+            showEvents = net.kuafuai.andee.config.VoiceConfig.timelineEvents(context)
         }
         historyView = history
         root.addView(
@@ -2532,6 +2568,8 @@ class FloatingWindowUi(
         communityRow.addView(tipsLine)
         communityRow.addView(communityLink(R.drawable.ic_github, GITHUB_URL, "GitHub"))
         communityRow.addView(communityLink(R.drawable.ic_discord, DISCORD_URL, "Discord"))
+        // WeChat is not a link: it opens Andee's QR code, to add it as a friend.
+        communityRow.addView(communityGlyph(R.drawable.ic_wechat, "WeChat") { listeners.onWeChatClick() })
         // The input pill, always there on the full card like the Mac's composer. It is not a field: an overlay
         // cannot raise the keyboard on this ROM, so a tap opens the real one ([TextInputActivity]) in its place.
         val inputRow = LinearLayout(context).apply {
@@ -2592,6 +2630,25 @@ class FloatingWindowUi(
         mute.contentDescription = "朗读"
         paintMute()
         root.addView(mute, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START))
+
+        // ---- 全部 / 只看对话, at the ball's lower left: the mirror of 朗读, and about the list below it ----
+        val events = TextView(context).apply {
+            textSize = Glass.Type.CAPTION
+            setTextColor(Color.parseColor(Glass.PHOTO_INK))
+            setPadding(dp(8), dp(6), dp(8), dp(6))
+            isClickable = true
+            Glass.pressable(this)
+            visibility = View.GONE
+            setOnClickListener {
+                val h = historyView ?: return@setOnClickListener
+                h.showEvents = !h.showEvents
+                net.kuafuai.andee.config.VoiceConfig.setTimelineEvents(context, h.showEvents)
+                paintEventsKey()
+            }
+        }
+        eventsKey = events
+        paintEventsKey()
+        root.addView(events, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START))
 
         // ---- Top-right controls ----
         //

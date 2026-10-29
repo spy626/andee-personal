@@ -65,6 +65,7 @@ fun main() {
             if (typing) ComposerFocus.pending = true
             frontTick++
         }
+        Assistant.openScreen = { s -> javax.swing.SwingUtilities.invokeLater { openChat(s) } }
         LaunchedEffect(frontTick) {
             if (frontTick == 0) return@LaunchedEffect
             delay(60)
@@ -113,7 +114,7 @@ fun main() {
                 Menu("Andee") {
                     Item(if (Strings.lang() == "zh") "新对话" else "New chat", onClick = { Assistant.newConversation(); chat = true; nav.go("chat") },
                         shortcut = androidx.compose.ui.input.key.KeyShortcut(androidx.compose.ui.input.key.Key.N, meta = true))
-                    Item(if (Strings.lang() == "zh") "显示对话" else "Show chat", onClick = { chat = true; nav.go("chat") })
+                    Item(if (Strings.lang() == "zh") "显示动态" else "Show timeline", onClick = { chat = true; nav.go("chat") })
                     Item(if (Strings.lang() == "zh") "设置" else "Settings", onClick = { chat = true; nav.go("settings") },
                         shortcut = androidx.compose.ui.input.key.KeyShortcut(androidx.compose.ui.input.key.Key.Comma, meta = true))
                     Item(if (Strings.lang() == "zh") "退出 Andee" else "Quit Andee", onClick = ::exitApplication,
@@ -231,7 +232,8 @@ fun tapToTalk(onNoVoice: () -> Unit) {
     when {
         Meeting.isActive() -> Meeting.stopFromUser()
         else -> {
-            if (Assistant.working()) Assistant.stop()
+            // Always: "working" misses what is queued or waiting to start, and that is what carried on after a tap.
+            Assistant.stop()
             if (!net.kuafuai.andee.desktop.voice.MacVoice.toggle()) onNoVoice()
         }
     }
@@ -240,7 +242,7 @@ fun tapToTalk(onNoVoice: () -> Unit) {
 fun ballActions(onType: () -> Unit, onNoVoice: () -> Unit) = BallActions(
     onTap = { tapToTalk(onNoVoice) },
     // Typing is a new request too: whatever was running or being read out stops first, as the tap does.
-    onDoubleTap = { if (Assistant.working()) Assistant.stop(); onType() },
+    onDoubleTap = { Assistant.stop(); onType() },
     onTripleTap = { if (Meeting.isActive()) Meeting.stopFromUser() else Assistant.stop() },
     onLongPress = {},
 )

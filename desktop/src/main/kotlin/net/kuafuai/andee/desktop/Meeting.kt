@@ -83,7 +83,7 @@ object Meeting {
         recording.set(true)
         exec.execute { micLoop() }
         onRecordingChanged(true)
-        Scrollback.add(Scrollback.Role.ASSISTANT, (if (Strings.lang() == "zh") "开始录音了。" else "Recording started."))
+        TimelineEvents.body(TimelineEvents.Body.MEETING, if (Strings.lang() == "zh") "开始录音：$title" else "Recording started: $title")
         Log.i(TAG, "meeting started: $title")
         return JSONObject().put("recording", true).put("title", title).put("started_at", startedAt)
     }
@@ -122,7 +122,7 @@ object Meeting {
         active = null
         if (seg != null) retire(seg)
         onRecordingChanged(false)
-        Scrollback.add(Scrollback.Role.ASSISTANT, (if (Strings.lang() == "zh") "录音结束了。" else "Recording ended."))
+        TimelineEvents.body(TimelineEvents.Body.MEETING, if (Strings.lang() == "zh") "录音结束" else "Recording ended")
         return result(stoppedBy)
     }
 
@@ -256,7 +256,7 @@ object Meeting {
 /** meeting.start / meeting.status / meeting.stop, so the brain sees them. */
 class MeetingTools : DesktopBrainHost.ToolProvider {
     override fun handles(method: String) = method.startsWith("meeting.")
-    override fun dispatch(method: String, p: JSONObject, silent: Boolean, untrusted: Boolean): Any? = when (method) {
+    override fun dispatch(method: String, p: JSONObject, callId: String, silent: Boolean, untrusted: Boolean): Any? = when (method) {
         "meeting.start" -> Meeting.start(p.optString("title").ifEmpty { null })
         "meeting.status" -> Meeting.status()
         "meeting.stop" -> Meeting.stop()

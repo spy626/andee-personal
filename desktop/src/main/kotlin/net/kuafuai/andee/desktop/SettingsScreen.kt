@@ -166,7 +166,7 @@ fun SettingsScreen(
             Row(Modifier.padding(top = 8.dp)) { Pill(st("settings_expr_open")) { onOpenExpressions() } }
 
         }
-        // ---- 小本本 ----
+        // ---- 复盘: the review switch (the notebook itself is the sidebar card) ----
         Section(st("settings_section_notebook")) {
             SegmentedPicker(listOf("on" to st("common_on"), "off" to st("common_off")), v["sweep"].orEmpty().ifEmpty { "on" }) { v["sweep"] = it }
             Note(st("settings_notebook_sweep_note"))
@@ -232,8 +232,14 @@ fun SettingsScreen(
                 } }
             }
         }
-        // ---- 它的打算: the plan, readable and trimmable by the person it is about ----
-        Section(st("settings_section_plan")) { PlanSection(zh) }
+        // ---- 自己动起来: the heartbeat and the work turns it starts. 关 leftmost; unset reads as 开 ----
+        Section(st("settings_section_drive")) {
+            SegmentedPicker(
+                listOf("off" to st("common_off"), "on" to st("common_on")),
+                v["drive"].orEmpty().ifEmpty { if (DesktopNotebook.driveEnabled()) "on" else "off" },
+            ) { v["drive"] = it }
+            Note(st("settings_drive_note"))
+        }
         // ---- 保险箱: a summary here, and the door to the card ----
         Section(st("settings_section_vault")) {
             val vaultN = remember { runCatching { net.kuafuai.andee.desktop.mac.MacVault.entries().size }.getOrDefault(0) }
@@ -243,7 +249,7 @@ fun SettingsScreen(
         }
         // ---- 单次任务最多步数 ----
         Section(st("settings_max_steps"), note = st("settings_max_steps_note")) {
-            GlassField(st("settings_max_steps"), v["max_steps"].orEmpty(), { v["max_steps"] = it }, hint = "25")
+            GlassField(st("settings_max_steps"), v["max_steps"].orEmpty(), { v["max_steps"] = it }, hint = "40")
 
         }
         // ---- Mac only: the shell ----
@@ -330,12 +336,13 @@ fun SettingsScreen(
 }
 
 /**
- * 它的打算 (`Plans`, design doc §5.5). Removing and pausing are done by the device at once, not asked of the
+ * 它的打算 (`Plans`, design doc §5.5) — drawn in the notebook's 打算 tab, not in Settings: it is part of its life,
+ * and the two places used to show the same plan differently. Removing and pausing are done by the device at once, not asked of the
  * model, and the timers follow in the same click. Anything subtler goes through the box at the bottom as an
  * ordinary message, and the model changes the plan itself.
  */
 @Composable
-private fun PlanSection(zh: Boolean) {
+internal fun PlanSection(zh: Boolean) {
     var rev by remember { mutableStateOf(0) }
     val plans = DesktopNotebook.plans
     val day = remember(rev) { plans.day(plans.today()) }
@@ -366,7 +373,7 @@ private fun PlanSection(zh: Boolean) {
                 }
             }
         }
-        if (day.quiet.isNotEmpty()) Note(st("settings_plan_quiet", day.quiet.joinToString(if (zh) "；" else "; ")))
+        if (day.quiet.isNotEmpty()) Note(st("settings_plan_quiet", day.quiet.joinToString(if (zh) "；" else "; ") { it.trim().trimEnd('。', '.', '；', ';') }))
     }
     Text(st("settings_plan_directions"), color = Palette.secondary, fontSize = 12.sp, modifier = Modifier.padding(top = 14.dp))
     if (dirs.isEmpty()) Note(st("settings_plan_none_directions"))
