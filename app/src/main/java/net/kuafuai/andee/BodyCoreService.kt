@@ -112,6 +112,8 @@ class BodyCoreService : Service() {
     private lateinit var audio: AudioIO
     private lateinit var asr: AsrController
     private lateinit var tts: TtsController
+    /** The single live voice session; it owns AudioIO while connected. */
+    private var geminiLive: net.kuafuai.andee.audio.GeminiLiveVoiceController? = null
 
     /**
      * The last finished answer, kept for exactly one reason: if speaking it
@@ -1074,6 +1076,10 @@ class BodyCoreService : Service() {
             )
             return
         }
+        if (geminiLive?.isActive() == true) {
+            stopGeminiLive()
+            return
+        }
         tts.stopSpeaking()
         // Talking takes the floor from typing. Leaving both live would put the
         // keyboard on the user's IME while the brain is about to drive another
@@ -1082,7 +1088,105 @@ class BodyCoreService : Service() {
         acceptBrainOutput = true
         // A deliberate press that fails is owed its explanation again.
         voiceFailureReported = false
-        asr.toggle()
+        startGeminiLive()
+    }
+
+    /**
+     * Gemini Live is Andee's voice transport, not a second brain. Function calls
+     * are exposed from the same AndroidBrainHost used by the local brain and
+     * still pass through CommandDispatcher/TurnGuards.
+     */
+    private fun startGeminiLive() {
+        if (exitRequested || geminiLive?.isActive() == true) return
+        if (net.kuafuai.andee.device.CallState.isActive) return
+        // WakeWord and Gemini must never own AudioRecord at the same time.
+        net.kuafuai.andee.wake.WakeWord.stop()
+        if (asr.isActive()) asr.stop()
+        tts.stopSpeaking()
+        val market = marketTools ?: net.kuafuai.andee.market.MarketTools(
+            baseUrl = net.kuafuai.andee.config.VoiceConfig.codeFlyingMarketBaseUrl(this),
+            apiKey = "",
+            enabled = false,
+        )
+        val host = net.kuafuai.andee.brain.AndroidBrainHost(
+            this, dispatcher, callExtensions, market, peers,
+        )
+        val live = net.kuafuai.andee.audio.GeminiLiveVoiceController(
+            context = this,
+            audio = audio,
+            host = host,
+            listener = object : net.kuafuai.andee.audio.GeminiLiveVoiceController.Listener {
+                override fun onConnecting() {
+                    ui.post { if (!exitRequested) window.setState(FloatingWindowUi.State.THINKING) }
+                }
+                override fun onReady() {
+                    ui.post {
+                        if (!exitRequested) {
+                            window.setState(FloatingWindowUi.State.LISTENING)
+                            window.setSubtitle("Gemini Live · Listening", FloatingWindowUi.SubtitleKind.FINAL)
+                        }
+                    }
+                }
+                override fun onInputTranscript(text: String) {
+                    val said = text.trim()
+                    if (said.isEmpty()) return
+                    ui.post {
+                        if (exitRequested || geminiLive?.isActive() != true) return@post
+                        if (VoiceExitCommand.matches(said, false)) {
+                            exitByVoice()
+                            return@post
+                        }
+                        // Gemini owns recognition and response in this mode.
+                        // Do not submit this transcript to the text brain again.
+                        window.setSubtitle(said, FloatingWindowUi.SubtitleKind.FINAL)
+                    }
+                }
+                override fun onOutputTranscript(text: String) {
+                    val spoken = text.trim()
+                    if (spoken.isNotEmpty()) ui.post {
+                        if (!exitRequested && geminiLive?.isActive() == true) {
+                            window.setSubtitle(spoken, FloatingWindowUi.SubtitleKind.FINAL)
+                        }
+                    }
+                }
+                override fun onFailure(message: String) {
+                    ui.post {
+                        geminiLive = null
+                        if (!exitRequested) {
+                            window.setState(FloatingWindowUi.State.IDLE)
+                            window.setSubtitle("Gemini Live: $message", FloatingWindowUi.SubtitleKind.FINAL)
+                            net.kuafuai.andee.wake.WakeWord.start()
+                        }
+                    }
+                }
+                override fun onStopped() {
+                    ui.post {
+                        geminiLive = null
+                        if (!exitRequested) {
+                            window.setState(FloatingWindowUi.State.IDLE)
+                            net.kuafuai.andee.wake.WakeWord.start()
+                        }
+                    }
+                }
+            },
+        )
+        geminiLive = live
+        live.start(
+            "You are Andee, the user's personal Android assistant. Speak naturally and concisely. " +
+                "Use the provided tools for device, app, screen, meeting, and other actions; never claim an action " +
+                "succeeded unless its tool result confirms it. Respect every permission, confirmation, and safety " +
+                "guard enforced by the tools. Do not invent device state. If a tool is unavailable or denied, explain that."
+        )
+    }
+
+    /** Releases Gemini's microphone/player before restoring the always-on wake listener. */
+    private fun stopGeminiLive(restoreWakeWord: Boolean = true) {
+        val live = geminiLive ?: return
+        geminiLive = null
+        live.stop()
+        if (restoreWakeWord && !exitRequested) {
+            ui.post { if (!exitRequested) net.kuafuai.andee.wake.WakeWord.start() }
+        }
     }
 
     /**
@@ -1426,6 +1530,7 @@ class BodyCoreService : Service() {
      * Main thread only (posted by [tts.onDrained]).
      */
     private fun followUpWindow() {
+        if (geminiLive?.isActive() == true) return
         if (exitRequested || !expectFollowUp) return
         if (asr.isActive() || tts.isSpeaking() || meeting.isActive() ||
             net.kuafuai.andee.device.CallState.isActive
@@ -1678,6 +1783,7 @@ class BodyCoreService : Service() {
         if (::dogLink.isInitialized) dogLink.close()
         stopBrain()
         stopWsServer()
+        stopGeminiLive(restoreWakeWord = false)
         net.kuafuai.andee.wake.WakeWord.stop()
         runCatching { unregisterReceiver(screenReceiver) }
         runCatching { unregisterReceiver(presentReceiver) }
@@ -2491,6 +2597,7 @@ class BodyCoreService : Service() {
             return
         }
         acceptBrainOutput = false
+        stopGeminiLive()
         guestBrain?.cancel()
         // A 继续修改 / 继续话题 the user walked away from must not attach itself
         // to whatever they ask next.
