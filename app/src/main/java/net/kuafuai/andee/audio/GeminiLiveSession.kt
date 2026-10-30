@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 class GeminiLiveSession(
     private val ephemeralToken: String,
     private val model: String = DEFAULT_MODEL,
+    private val voice: String = DEFAULT_VOICE,
     private val listener: Listener,
     private val tools: JSONArray = JSONArray(),
     private val client: OkHttpClient = OkHttpClient.Builder()
@@ -61,7 +62,7 @@ class GeminiLiveSession(
                             .put("responseModalities", JSONArray().put("AUDIO"))
                             .put("speechConfig", JSONObject()
                                 .put("voiceConfig", JSONObject()
-                                    .put("prebuiltVoiceConfig", JSONObject().put("voiceName", "Kore")))))
+                                    .put("prebuiltVoiceConfig", JSONObject().put("voiceName", voice)))))
                         .put("systemInstruction", JSONObject()
                             .put("parts", JSONArray().put(JSONObject().put("text", systemInstruction))))
                         .put("inputAudioTranscription", JSONObject())
@@ -175,6 +176,7 @@ class GeminiLiveSession(
 
     companion object {
         const val DEFAULT_MODEL = "gemini-3.8-live"
+        const val DEFAULT_VOICE = "Kore"
         private const val ENDPOINT =
             "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained"
     }
