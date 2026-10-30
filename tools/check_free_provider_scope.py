@@ -136,7 +136,7 @@ for before, after in (
      '        } else if (cfg.freeProvider == FreeProviderGuard.GROQ) {\n'
      '            // No notebook, plan, selfhood, scene, page, topic, gear, friends,\n'
      '            // device state or timestamp is sent to Groq. Only the user\'s words.\n'
-     '            JSONObject().put("role", "user").put("content", userText.take(GroqChatContext.MAX_USER_CHARS))\n'
+     '            JSONObject().put("role", "user").put("content", GroqChatContext.clip(userText, GroqChatContext.MAX_USER_CHARS))\n'
      '        } else {\n            // The notebook index rides in **here**, on the user message, and\n'),
     ('        val tools = if (quiet) LlmClient.toolSpecs(*host.workTools(workTerritory).toTypedArray())\n'
      '        else LlmClient.toolSpecs(*host.toolLists().toTypedArray())',
