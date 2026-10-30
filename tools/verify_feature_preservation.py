@@ -72,6 +72,12 @@ ALLOWED_CHANGES = {
     # Phase 10B.5: Back overlay priority + fail-closed Groq/quota diagnostics.
     "tools/check_phase10b5.py",
     "docs/PHASE10B5_BACK_GROQ_QUOTA.md",
+    # Phase 10B.6: append-only compact LYRA-style Groq text-chat prompt and tests.
+    "core/src/main/kotlin/net/kuafuai/andee/brain/LocalPrompt.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/brain/GroqChatContext.kt",
+    "core/src/test/kotlin/net/kuafuai/andee/brain/GroqChatContextTest.kt",
+    "docs/PHASE10B6_GROQ_LYRA_CHAT.md",
+    "tools/check_phase10b6.py",
     "docs/PHASE8_V080_INTEGRATION.md",
     # Explicitly scoped transport fixes. Existing UI/messaging/tool
     # dispatch/voice/rendering source must remain byte-for-byte identical.
