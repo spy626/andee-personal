@@ -1122,7 +1122,7 @@ class BodyCoreService : Service() {
                 override fun onReady() {
                     ui.post {
                         if (!exitRequested) {
-                            window.setState(FloatingWindowUi.State.LISTENING)
+                            window.setState(FloatingWindowUi.State.RECORDING)
                             window.setSubtitle("Gemini Live · Listening", FloatingWindowUi.SubtitleKind.FINAL)
                         }
                     }
@@ -1132,7 +1132,7 @@ class BodyCoreService : Service() {
                     if (said.isEmpty()) return
                     ui.post {
                         if (exitRequested || geminiLive?.isActive() != true) return@post
-                        if (VoiceExitCommand.matches(said, false)) {
+                        if (VoiceExitCommand.matches(said, true)) {
                             exitByVoice()
                             return@post
                         }
@@ -1184,9 +1184,6 @@ class BodyCoreService : Service() {
         val live = geminiLive ?: return
         geminiLive = null
         live.stop()
-        if (restoreWakeWord && !exitRequested) {
-            ui.post { if (!exitRequested) net.kuafuai.andee.wake.WakeWord.start() }
-        }
     }
 
     /**
