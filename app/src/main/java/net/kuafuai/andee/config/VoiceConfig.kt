@@ -345,6 +345,26 @@ object VoiceConfig {
          * if the build enables it and otherwise to local. Unknown saved values
          * fail closed to local — same rule as [groundingEnabled].
          */
+        /** Gemini Live settings are independent of the selected text-model backend. */
+        fun geminiLiveModel(context: Context): String =
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getString("gemini_live_model", net.kuafuai.andee.audio.GeminiLiveSession.DEFAULT_MODEL)
+                .orEmpty().trim().ifEmpty { net.kuafuai.andee.audio.GeminiLiveSession.DEFAULT_MODEL }
+
+        fun geminiLiveVoice(context: Context): String {
+            val saved = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getString("gemini_live_voice", net.kuafuai.andee.audio.GeminiLiveSession.DEFAULT_VOICE)
+                .orEmpty().trim()
+            return saved.takeIf { it in setOf("Aoede", "Charon", "Kore", "Fenrir", "Puck", "Leda", "Orus", "Zephyr") }
+                ?: net.kuafuai.andee.audio.GeminiLiveSession.DEFAULT_VOICE
+        }
+
+        fun geminiLivePersonality(context: Context): String {
+            val saved = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getString("gemini_live_personality", "friend").orEmpty().trim().lowercase()
+            return saved.takeIf { it in setOf("friend", "professional", "assistant") } ?: "friend"
+        }
+
         fun brainMode(context: Context): String {
             val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             return resolveBrainMode(context, p.getString("brain", ""))
