@@ -56,6 +56,12 @@ allowed = {
     # Phase 10B.5: Back overlay priority + fail-closed Groq/quota diagnostics.
     "tools/check_phase10b5.py",
     "docs/PHASE10B5_BACK_GROQ_QUOTA.md",
+    # Phase 10B.6: bounded LYRA-style Groq text-chat implementation.
+    "core/src/main/kotlin/net/kuafuai/andee/brain/LocalPrompt.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/brain/GroqChatContext.kt",
+    "core/src/test/kotlin/net/kuafuai/andee/brain/GroqChatContextTest.kt",
+    "docs/PHASE10B6_GROQ_LYRA_CHAT.md",
+    "tools/check_phase10b6.py",
     "app/src/main/AndroidManifest.xml",
 
     "app/src/main/java/net/kuafuai/andee/ui/FloatingWindowUi.kt",
