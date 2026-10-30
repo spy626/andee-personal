@@ -88,7 +88,12 @@ for path in ("app/src/main/res/values/strings.xml", "app/src/main/res/values-en/
     content = read(path)
     assert 'name="settings_free_groq_warning"' in content
     assert 'name="settings_free_scope"' in content
-    assert "personal memory" in content and "background autonomy" in content, f"Missing Groq text-only scope warning in {path}"
+    if path.endswith("values-en/strings.xml"):
+        assert "personal memory" in content and "background autonomy" in content, f"Missing English Groq text-only scope warning in {path}"
+    else:
+        # The default resources are Chinese; validate the same safety boundary
+        # in the language actually shipped there instead of English keywords.
+        assert "个人记忆" in content and "后台自主任务" in content, f"Missing Chinese Groq text-only scope warning in {path}"
 
 # Provider credential/configuration wiring, Vault, voice engines and Android
 # action executors must be exactly the Phase 10B.5 versions.
