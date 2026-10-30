@@ -2,6 +2,7 @@ package net.kuafuai.andee.audio
 
 import android.util.Base64
 import okhttp3.OkHttpClient
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
@@ -48,7 +49,9 @@ class GeminiLiveSession(
     fun connect(systemInstruction: String) {
         require(apiKey.isNotBlank()) { "Gemini API key is missing" }
         require(model.isNotBlank()) { "Gemini Live model is missing" }
-        val url = "$ENDPOINT?key=$apiKey"
+        val url = ENDPOINT.toHttpUrl().newBuilder()
+            .addQueryParameter("key", apiKey)
+            .build()
         val request = Request.Builder().url(url).build()
         socket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
