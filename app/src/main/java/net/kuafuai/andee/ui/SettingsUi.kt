@@ -910,17 +910,9 @@ class SettingsUi(
             ),
         )
 
-        applyProvider = { p, animate ->
-            // A provider's block is shown if it is picked on *either* side. The
-            // blocks hold both the hearing and speaking rows, so hiding one
-            // because the *hearing* picker does not name it would bury the key
-            // field for the provider the *speaking* picker just chose.
-            val useHuoshan = p == VoiceConfig.VOICE_HUOSHAN || speakPicked == VoiceConfig.VOICE_HUOSHAN
-            val useGoogle = p == VoiceConfig.VOICE_GOOGLE || speakPicked == VoiceConfig.VOICE_GOOGLE
-            Glass.setVisible(huoshanBlock, useHuoshan, animate)
-            Glass.setVisible(googleBlock, useGoogle, animate)
-        }
-        applyProvider(provider, false)
+        // Legacy provider selectors were removed from the voice UI; Gemini Live is the sole voice provider.
+
+
 
         // **The voice block is not drawn at all under the hosted backend**, and
         // not merely disabled. There, [VoiceConfig.voiceProvider] pins 火山 and
