@@ -40,6 +40,11 @@ allowed = {
     "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveVoiceController.kt",
     "app/src/test/java/net/kuafuai/andee/audio/GeminiLiveTokenProviderTest.kt",
     "app/src/test/java/net/kuafuai/andee/audio/GeminiLiveToolAdapterTest.kt",
+    # Gemini Live integration explicitly reviewed in Phase 10B.7; dedicated scope gates cover these files.
+    "app/src/main/java/net/kuafuai/andee/BodyCoreService.kt",
+    "app/src/main/java/net/kuafuai/andee/config/ProviderKeyStore.kt",
+    "app/src/main/java/net/kuafuai/andee/config/VoiceConfig.kt",
+    "app/src/main/java/net/kuafuai/andee/ui/SettingsUi.kt",
     "docs/PHASE10B6_GROQ_LYRA_CHAT.md",
     ".github/workflows/build.yml",
 }
@@ -104,11 +109,9 @@ for path in ("app/src/main/res/values/strings.xml", "app/src/main/res/values-en/
 
 # Provider credential/configuration wiring, Vault, voice engines and Android
 # action executors must be exactly the Phase 10B.5 versions.
+# Phase 10B.7 intentionally changes the voice lifecycle and Gemini settings/key wiring.
+# Those paths are reviewed by check_android_back_scope.py, provider-scope and settings gates.
 for path in (
-    "app/src/main/java/net/kuafuai/andee/config/VoiceConfig.kt",
-    "app/src/main/java/net/kuafuai/andee/config/ProviderKeyStore.kt",
-    "app/src/main/java/net/kuafuai/andee/ui/SettingsUi.kt",
-    "app/src/main/java/net/kuafuai/andee/BodyCoreService.kt",
     "app/src/main/java/net/kuafuai/andee/net/CommandDispatcher.kt",
     "app/src/main/java/net/kuafuai/andee/config/Vault.kt",
     "app/src/main/java/net/kuafuai/andee/config/VaultBioGate.kt",
