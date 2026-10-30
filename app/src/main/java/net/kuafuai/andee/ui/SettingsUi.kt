@@ -1010,6 +1010,17 @@ class SettingsUi(
         )
         note(googleBlock, lctx.getString(R.string.settings_voice_google_note))
 
+        // Gemini Live has its own key; do not mix it with the Vertex key above.
+        val geminiLiveBlock = block(voiceBlock)
+        field(
+            geminiLiveBlock,
+            "free_key_${ProviderKeyStore.GEMINI_LIVE}",
+            lctx.getString(R.string.settings_gemini_live_api_key),
+            hint = lctx.getString(R.string.settings_gemini_live_api_key_hint),
+            secret = true,
+        )
+        note(geminiLiveBlock, lctx.getString(R.string.settings_gemini_live_key_note))
+
         applyProvider = { p, animate ->
             // A provider's block is shown if it is picked on *either* side. The
             // blocks hold both the hearing and speaking rows, so hiding one
@@ -2158,7 +2169,9 @@ class SettingsUi(
             // deletes the pref when it sees one. Non-overridable keys only go
             // in when non-empty, so an untouched field doesn't wipe a saved
             // value.
-            if (v.isNotEmpty() || k in VoiceConfig.OVERRIDE_KEYS) {
+            if (k != "free_key_${ProviderKeyStore.GEMINI_LIVE}" &&
+                (v.isNotEmpty() || k in VoiceConfig.OVERRIDE_KEYS)
+            ) {
                 updates[k] = v
             }
         }
@@ -2171,7 +2184,7 @@ class SettingsUi(
         try {
             for (id in listOf(
                 FreeProviderGuard.XKIRO, FreeProviderGuard.GROQ,
-                FreeProviderGuard.OPENROUTER,
+                FreeProviderGuard.OPENROUTER, ProviderKeyStore.GEMINI_LIVE,
             )) {
                 stagedFields["free_key_$id"]?.trim()?.takeIf { it.isNotEmpty() }
                     ?.let { ProviderKeyStore.put(context, id, it) }
