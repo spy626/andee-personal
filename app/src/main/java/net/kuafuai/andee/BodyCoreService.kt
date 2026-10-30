@@ -1115,6 +1115,8 @@ class BodyCoreService : Service() {
             context = this,
             audio = audio,
             host = host,
+            model = net.kuafuai.andee.config.VoiceConfig.geminiLiveModel(this),
+            voice = net.kuafuai.andee.config.VoiceConfig.geminiLiveVoice(this),
             listener = object : net.kuafuai.andee.audio.GeminiLiveVoiceController.Listener {
                 override fun onConnecting() {
                     ui.post { if (!exitRequested) window.setState(FloatingWindowUi.State.THINKING) }
@@ -1195,11 +1197,16 @@ class BodyCoreService : Service() {
             },
         )
         geminiLive = live
+        val personalityStyle = when (net.kuafuai.andee.config.VoiceConfig.geminiLivePersonality(this)) {
+            "professional" -> "Use a composed, precise, professional tone. Avoid slang and unnecessary jokes. "
+            "assistant" -> "Be clear, capable, concise, and task-focused while remaining warm. "
+            else -> "Sound like a natural, friendly companion. Light humour is welcome when appropriate; never force it. "
+        }
         live.start(
-            "You are Andee, the user's personal Android assistant. Speak naturally and concisely. " +
-                "Use the provided tools for device, app, screen, meeting, and other actions; never claim an action " +
-                "succeeded unless its tool result confirms it. Respect every permission, confirmation, and safety " +
-                "guard enforced by the tools. Do not invent device state. If a tool is unavailable or denied, explain that."
+            "You are Andee, the user's personal Android assistant. $personalityStyle" +
+                "Speak naturally and concisely. Use the provided tools for device, app, screen, meeting, and other actions; " +
+                "never claim an action succeeded unless its tool result confirms it. Respect every permission, confirmation, " +
+                "and safety guard enforced by the tools. Do not invent device state. If a tool is unavailable or denied, explain that."
         )
     }
 
