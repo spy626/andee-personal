@@ -32,6 +32,9 @@ allowed={
     "docs/PHASE10B6_GROQ_LYRA_CHAT.md",
     "tools/check_phase10b6.py",
     "core/src/test/kotlin/net/kuafuai/andee/brain/FreeProviderGuardTest.kt",
+    # Phase 10B.6 adds provider-scope labels to Settings resources.
+    "app/src/main/res/values/strings.xml",
+    "app/src/main/res/values-en/strings.xml",
 
     "core/src/main/kotlin/net/kuafuai/andee/brain/LocalBrain.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/FreeProviderGuard.kt",
