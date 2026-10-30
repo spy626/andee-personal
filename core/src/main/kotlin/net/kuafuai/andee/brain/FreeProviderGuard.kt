@@ -33,7 +33,8 @@ object FreeProviderGuard {
 
     /** No server response body (which could echo prompts or secrets) in UI errors. */
     fun groqErrorHint(status: Int): String = when (status) {
-        400 -> "request or tool format rejected; check model/tool compatibility"
+        400 -> "request format rejected; check the selected Groq model"
+        413 -> "request payload too large; Groq text context is capped locally, shorten the latest message if this repeats"
         401 -> "API key rejected; check the Groq key in Settings"
         402, 403 -> "account/model access denied; verify free-plan eligibility"
         404 -> "model not available for this Groq key"

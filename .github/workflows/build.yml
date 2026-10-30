@@ -54,6 +54,7 @@ jobs:
       - run: python3 tools/check_xkiro_auto_scope.py
       - run: python3 tools/check_android_back_scope.py
       - run: python3 tools/check_phase10b5.py
+      - run: python3 tools/check_phase10b6.py
 
       - uses: actions/upload-artifact@v4
         with:

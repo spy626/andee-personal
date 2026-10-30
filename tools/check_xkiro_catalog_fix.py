@@ -17,6 +17,7 @@ def source(path):
     return (ROOT / path).read_text(encoding="utf-8")
 
 allow = {
+    "core/src/main/kotlin/net/kuafuai/andee/brain/LocalBrain.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/FreeProviderGuard.kt",
     "core/src/test/kotlin/net/kuafuai/andee/brain/FreeProviderGuardTest.kt",
     "tools/check_xkiro_catalog_fix.py",
@@ -38,6 +39,12 @@ allow = {
     # Phase 10B.5: Back overlay priority + fail-closed Groq/quota diagnostics.
     "tools/check_phase10b5.py",
     "docs/PHASE10B5_BACK_GROQ_QUOTA.md",
+    # Phase 10B.6: bounded LYRA-style Groq text-chat implementation.
+    "core/src/main/kotlin/net/kuafuai/andee/brain/LocalPrompt.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/brain/GroqChatContext.kt",
+    "core/src/test/kotlin/net/kuafuai/andee/brain/GroqChatContextTest.kt",
+    "docs/PHASE10B6_GROQ_LYRA_CHAT.md",
+    "tools/check_phase10b6.py",
     "app/src/main/AndroidManifest.xml",
 
     "app/src/main/java/net/kuafuai/andee/ui/FloatingWindowUi.kt",
@@ -66,7 +73,6 @@ for path in (
     "app/src/main/java/net/kuafuai/andee/device/DeviceCommsController.kt",
     "app/src/main/java/net/kuafuai/andee/screen/ScreenController.kt",
 
-    "core/src/main/kotlin/net/kuafuai/andee/brain/LocalBrain.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/SelfWork.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/Heartbeat.kt",
     "core/src/main/kotlin/net/kuafuai/andee/config/BrainConfig.kt",

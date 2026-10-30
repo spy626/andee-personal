@@ -25,9 +25,12 @@ allowed = {
     "app/src/main/res/values-en/strings.xml",
     "core/src/main/kotlin/net/kuafuai/andee/config/BrainConfig.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/LocalBrain.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/brain/LocalPrompt.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/brain/GroqChatContext.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/LlmClient.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/FreeProviderGuard.kt",
     "core/src/test/kotlin/net/kuafuai/andee/brain/FreeProviderGuardTest.kt",
+    "core/src/test/kotlin/net/kuafuai/andee/brain/GroqChatContextTest.kt",
     "app/src/androidTest/java/net/kuafuai/andee/acceptance/FreeProviderKeysTest.kt",
     "tools/check_free_provider_scope.py",
     "tools/check_vault_biometric_only.py",
@@ -49,6 +52,8 @@ allowed = {
     # Phase 10B.5: Back overlay priority + fail-closed Groq/quota diagnostics.
     "tools/check_phase10b5.py",
     "docs/PHASE10B5_BACK_GROQ_QUOTA.md",
+    "docs/PHASE10B6_GROQ_LYRA_CHAT.md",
+    "tools/check_phase10b6.py",
     "app/src/main/AndroidManifest.xml",
 
     "app/src/main/java/net/kuafuai/andee/ui/FloatingWindowUi.kt",
@@ -82,10 +87,69 @@ for path in (
 
 brain = read("core/src/main/kotlin/net/kuafuai/andee/brain/LocalBrain.kt")
 old_brain = git("show", f"{BASE}:core/src/main/kotlin/net/kuafuai/andee/brain/LocalBrain.kt")
-assert brain.strip() == old_brain.replace(
+expected_brain = old_brain.replace(
     "        reasoningEffort = cfg.reasoningEffort,\n    )",
     "        reasoningEffort = cfg.reasoningEffort,\n        freeProvider = cfg.freeProvider,\n    )",
-).strip(), "LocalBrain agent/tool/memory behavior changed beyond forwarding provider ID"
+)
+# Reverse only the explicitly reviewed Groq-specific branches, then require
+# every legacy/xKiro/OpenRouter agent path to remain byte-identical.
+normalised = brain
+for before, after in (
+    ('        if (text.isEmpty() && images.isEmpty()) return\n',
+     '        if (text.isEmpty() && images.isEmpty()) return\n'
+     '        if (cfg.freeProvider == FreeProviderGuard.GROQ && images.isNotEmpty()) {\n'
+     '            onFinal("Groq Free is text-only in Andee. Photos and screenshots are not sent; switch to a verified vision-capable free provider for image tasks.")\n'
+     '            return\n'
+     '        }\n'),
+    ('    fun note(text: String) {\n',
+     '    fun note(text: String) {\n'
+     '        // LYRA-style Groq never receives internal notes or personal-memory context.\n'
+     '        if (cfg.freeProvider == FreeProviderGuard.GROQ) return\n'),
+    ('    private fun rebuildHistoryFromScrollback() {\n',
+     '    private fun rebuildHistoryFromScrollback() {\n'
+     '        if (cfg.freeProvider == FreeProviderGuard.GROQ) return\n'),
+    ('    private fun systemPrompt(): String = LocalPrompt.withPersona(\n'
+     '        host.persona(),\n'
+     '        host.activeSceneName()?.let { host.scene(it) },\n'
+     '        host.platformPrompt(),\n'
+     '    )',
+     '    private fun systemPrompt(): String =\n'
+     '        if (cfg.freeProvider == FreeProviderGuard.GROQ) {\n'
+     '            LocalPrompt.groqChat(host.persona())\n'
+     '        } else {\n'
+     '            LocalPrompt.withPersona(\n'
+     '                host.persona(),\n'
+     '                host.activeSceneName()?.let { host.scene(it) },\n'
+     '                host.platformPrompt(),\n'
+     '            )\n'
+     '        }'),
+    ('    private fun runTurn(userText: String, gen: Int, kind: TurnKind, images: List<String> = emptyList()) {\n',
+     '    private fun runTurn(userText: String, gen: Int, kind: TurnKind, images: List<String> = emptyList()) {\n'
+     '        // Groq follows LYRA\'s text-only chat contract, not Andee\'s agent route.\n'
+     '        // Background, notification, peer, work and review turns must not be\n'
+     '        // turned into unsupported pretend actions.\n'
+     '        if (cfg.freeProvider == FreeProviderGuard.GROQ && kind != TurnKind.USER) {\n'
+     '            host.logInfo(TAG, "Groq text-chat skipped non-user $kind turn; no device action or memory request sent")\n'
+     '            return\n'
+     '        }\n'),
+    ('        } else {\n            // The notebook index rides in **here**, on the user message, and\n',
+     '        } else if (cfg.freeProvider == FreeProviderGuard.GROQ) {\n'
+     '            // No notebook, plan, selfhood, scene, page, topic, gear, friends,\n'
+     '            // device state or timestamp is sent to Groq. Only the user\'s words.\n'
+     '            JSONObject().put("role", "user").put("content", GroqChatContext.clip(userText, GroqChatContext.MAX_USER_CHARS))\n'
+     '        } else {\n            // The notebook index rides in **here**, on the user message, and\n'),
+    ('        val tools = if (quiet) LlmClient.toolSpecs(*host.workTools(workTerritory).toTypedArray())\n'
+     '        else LlmClient.toolSpecs(*host.toolLists().toTypedArray())',
+     '        val tools = if (cfg.freeProvider == FreeProviderGuard.GROQ) JSONArray()\n'
+     '        else if (quiet) LlmClient.toolSpecs(*host.workTools(workTerritory).toTypedArray())\n'
+     '        else LlmClient.toolSpecs(*host.toolLists().toTypedArray())'),
+    ('    private fun maybeHarvest() {\n        if (cfg.apiKey.isEmpty()) return',
+     '    private fun maybeHarvest() {\n'
+     '        if (cfg.freeProvider == FreeProviderGuard.GROQ || cfg.apiKey.isEmpty()) return'),
+):
+    assert after in normalised, "Missing reviewed Groq-only LocalBrain change"
+    normalised = normalised.replace(after, before, 1)
+assert normalised.strip() == expected_brain.strip(), "LocalBrain changes escaped the Groq-only chat route"
 
 guard = read("core/src/main/kotlin/net/kuafuai/andee/brain/FreeProviderGuard.kt")
 for required in (
@@ -110,7 +174,8 @@ assert 'body.put("provider", JSONObject().put("max_price", JSONObject()' in llm
 assert 'FreeProviderGuard.preflightXKiro(http, apiKey, model)' in llm
 assert llm.index('FreeProviderGuard.preflightXKiro') < llm.index('val req = Request.Builder()')
 assert '"$baseUrl/chat/completions"' in llm
-assert 'body.put("tools", tools).put("tool_choice", "auto")' in llm
+assert 'if (tools.length() > 0 && freeProvider != FreeProviderGuard.GROQ)' in llm
+assert 'GroqChatContext.compact(messages)' in llm
 
 prefs = read("app/src/main/java/net/kuafuai/andee/config/VoiceConfig.kt")
 for name in ('"free_provider"', '"free_model_xkiro"', '"free_model_groq"',
