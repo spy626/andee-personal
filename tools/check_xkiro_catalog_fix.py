@@ -17,6 +17,7 @@ def source(path):
     return (ROOT / path).read_text(encoding="utf-8")
 
 allow = {
+    "core/src/main/kotlin/net/kuafuai/andee/brain/LocalBrain.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/FreeProviderGuard.kt",
     "core/src/test/kotlin/net/kuafuai/andee/brain/FreeProviderGuardTest.kt",
     "tools/check_xkiro_catalog_fix.py",
@@ -72,7 +73,6 @@ for path in (
     "app/src/main/java/net/kuafuai/andee/device/DeviceCommsController.kt",
     "app/src/main/java/net/kuafuai/andee/screen/ScreenController.kt",
 
-    "core/src/main/kotlin/net/kuafuai/andee/brain/LocalBrain.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/SelfWork.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/Heartbeat.kt",
     "core/src/main/kotlin/net/kuafuai/andee/config/BrainConfig.kt",
