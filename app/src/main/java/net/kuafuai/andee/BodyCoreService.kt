@@ -1175,6 +1175,15 @@ class BodyCoreService : Service() {
                         }
                     }
                 }
+                override fun onTurnComplete() {
+                    ui.post {
+                        if (!exitRequested && geminiLive?.isActive() == true) {
+                            // Gemini's server-side turn detector owns follow-up;
+                            // return the ball to listening without reopening ASR.
+                            window.setState(FloatingWindowUi.State.RECORDING)
+                        }
+                    }
+                }
                 override fun onFailure(message: String) {
                     ui.post {
                         geminiLive = null
