@@ -26,6 +26,7 @@ object ProviderKeyStore {
         FreeProviderGuard.XKIRO,
         FreeProviderGuard.GROQ,
         FreeProviderGuard.OPENROUTER,
+        GEMINI_LIVE,
     )
 
     private fun secretKey(): SecretKey {
