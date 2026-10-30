@@ -882,6 +882,33 @@ class SettingsUi(
             secret = true,
         )
         note(geminiLiveBlock, lctx.getString(R.string.settings_gemini_live_key_note))
+        rowLabel(geminiLiveBlock, "Live model")
+        field(
+            geminiLiveBlock,
+            "gemini_live_model",
+            "Gemini Live model ID",
+            hint = net.kuafuai.andee.audio.GeminiLiveSession.DEFAULT_MODEL,
+        )
+        rowLabel(geminiLiveBlock, "Voice")
+        segmented(
+            geminiLiveBlock,
+            "gemini_live_voice",
+            listOf(
+                "Aoede" to "Aoede", "Charon" to "Charon", "Kore" to "Kore",
+                "Fenrir" to "Fenrir", "Puck" to "Puck", "Leda" to "Leda",
+                "Orus" to "Orus", "Zephyr" to "Zephyr",
+            ),
+        )
+        rowLabel(geminiLiveBlock, "Personality")
+        segmented(
+            geminiLiveBlock,
+            "gemini_live_personality",
+            listOf(
+                "friend" to "Friend",
+                "professional" to "Professional",
+                "assistant" to "Assistant",
+            ),
+        )
 
         applyProvider = { p, animate ->
             // A provider's block is shown if it is picked on *either* side. The
