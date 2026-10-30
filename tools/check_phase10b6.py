@@ -88,7 +88,7 @@ for path in ("app/src/main/res/values/strings.xml", "app/src/main/res/values-en/
     content = read(path)
     assert 'name="settings_free_groq_warning"' in content
     assert 'name="settings_free_scope"' in content
-    assert "no personal memory" in content or "不使用个人记忆" in content
+    assert "personal memory" in content and "background autonomy" in content, f"Missing Groq text-only scope warning in {path}"
 
 # Provider credential/configuration wiring, Vault, voice engines and Android
 # action executors must be exactly the Phase 10B.5 versions.
