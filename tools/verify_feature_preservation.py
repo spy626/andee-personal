@@ -121,6 +121,14 @@ ALLOWED_CHANGES = {
     "app/src/main/java/net/kuafuai/andee/screen/ScreenController.kt",
     "tools/check_untrusted_screen_and_extension.py",
     "docs/PHASE7_UNTRUSTED_UI_BOUNDARY.md",
+    # Phase 10B.7: Gemini Live voice transport and guarded tool bridge.
+    # New production classes are paired with focused token/tool adapter unit tests.
+    "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveSession.kt",
+    "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveTokenProvider.kt",
+    "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveToolAdapter.kt",
+    "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveVoiceController.kt",
+    "app/src/test/java/net/kuafuai/andee/audio/GeminiLiveTokenProviderTest.kt",
+    "app/src/test/java/net/kuafuai/andee/audio/GeminiLiveToolAdapterTest.kt",
     "SECURITY.md",  # Written disclosure of known risks, not runtime code.
 }
 
