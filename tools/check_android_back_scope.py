@@ -37,6 +37,10 @@ allowed={
     "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveTokenProvider.kt",
     "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveToolAdapter.kt",
     "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveVoiceController.kt",
+    # Gemini Live settings/key integration: separately covered by provider and settings gates.
+    "app/src/main/java/net/kuafuai/andee/config/VoiceConfig.kt",
+    "app/src/main/java/net/kuafuai/andee/config/ProviderKeyStore.kt",
+    "app/src/main/java/net/kuafuai/andee/ui/SettingsUi.kt",
     "app/src/test/java/net/kuafuai/andee/audio/GeminiLiveTokenProviderTest.kt",
     "app/src/test/java/net/kuafuai/andee/audio/GeminiLiveToolAdapterTest.kt",
     # Phase 10B.6 adds provider-scope labels to Settings resources.
@@ -85,8 +89,8 @@ assert expected.strip() == read(body).strip(), "Body service changed beyond two 
 
 # Protect whole original LLM/voice/screen/autonomous functions byte-for-byte.
 for p in (
-    "app/src/main/java/net/kuafuai/andee/config/VoiceConfig.kt",
-    "app/src/main/java/net/kuafuai/andee/config/ProviderKeyStore.kt",
+    # VoiceConfig, ProviderKeyStore and SettingsUi are explicit Gemini Live scope;
+    # their provider slots, encryption and navigation are asserted by dedicated gates.
     "app/src/main/java/net/kuafuai/andee/config/Vault.kt",
     "app/src/main/java/net/kuafuai/andee/config/VaultBioGate.kt",
     "app/src/main/java/net/kuafuai/andee/ui/SettingsUi.kt",
