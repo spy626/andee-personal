@@ -1133,7 +1133,7 @@ class BodyCoreService : Service() {
                     ui.post {
                         if (exitRequested || geminiLive?.isActive() != true) return@post
                         val normalized = said.lowercase(java.util.Locale.ROOT)
-                            .filter(Char::isLetterOrDigit)
+                            .filter { it.isLetterOrDigit() }
                         if (meeting.isActive() && normalized in setOf(
                                 "stopmeeting", "endmeeting", "stoptherecording", "endtherecording",
                                 "meetingstop", "meetingend",
