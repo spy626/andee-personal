@@ -316,6 +316,10 @@ class LocalBrain(
     fun submit(userText: String, images: List<String> = emptyList()) {
         val text = userText.trim()
         if (text.isEmpty() && images.isEmpty()) return
+        if (cfg.freeProvider == FreeProviderGuard.GROQ && images.isNotEmpty()) {
+            onFinal("Groq Free is text-only in Andee. Photos and screenshots are not sent; switch to a verified vision-capable free provider for image tasks.")
+            return
+        }
         if (cfg.apiKey.isEmpty()) {
             // Said out loud rather than logged: from the ball's point of view a
             // missing key is indistinguishable from a brain that never answers.
@@ -460,6 +464,7 @@ class LocalBrain(
      * [history] here is safe.
      */
     private fun rebuildHistoryFromScrollback() {
+        if (cfg.freeProvider == FreeProviderGuard.GROQ) return
         val rows = host.scrollback()
             .filter { it.isUser || it.isAssistant }
             .filter { it.text.isNotBlank() }
@@ -817,6 +822,8 @@ class LocalBrain(
      * Callable from any thread; [history] stays loop-thread-only.
      */
     fun note(text: String) {
+        // LYRA-style Groq never receives internal notes or personal-memory context.
+        if (cfg.freeProvider == FreeProviderGuard.GROQ) return
         val t = text.trim()
         if (t.isEmpty()) return
         loop.execute {
@@ -934,6 +941,13 @@ class LocalBrain(
     // ------------------------------------------------------------------
 
     private fun runTurn(userText: String, gen: Int, kind: TurnKind, images: List<String> = emptyList()) {
+        // Groq follows LYRA's text-only chat contract, not Andee's agent route.
+        // Background, notification, peer, work and review turns must not be
+        // turned into unsupported pretend actions.
+        if (cfg.freeProvider == FreeProviderGuard.GROQ && kind != TurnKind.USER) {
+            host.logInfo(TAG, "Groq text-chat skipped non-user $kind turn; no device action or memory request sent")
+            return
+        }
         val internal = kind.silent
         // Says nothing aloud, but is a real turn: it has a user-shaped opening message, tools, and a trusted caller.
         val quiet = kind.quiet
@@ -960,6 +974,10 @@ class LocalBrain(
             // me to review our conversation" — false, and it sticks. This is
             // the same call the cloud makes with `last_role="assistant"`.
             JSONObject().put("role", "assistant").put("content", userText)
+        } else if (cfg.freeProvider == FreeProviderGuard.GROQ) {
+            // No notebook, plan, selfhood, scene, page, topic, gear, friends,
+            // device state or timestamp is sent to Groq. Only the user's words.
+            JSONObject().put("role", "user").put("content", userText.take(GroqChatContext.MAX_USER_CHARS))
         } else {
             // The notebook index rides in **here**, on the user message, and
             // not in the system prompt. `LocalPrompt` is a constant on purpose
@@ -1102,7 +1120,8 @@ class LocalBrain(
 
         // A work turn gets the territory's set, not all ~80: it is cheaper and, more to the point, a stranger-facing
         // errand has no business holding the vault or the shell. Everyone else is unchanged.
-        val tools = if (quiet) LlmClient.toolSpecs(*host.workTools(workTerritory).toTypedArray())
+        val tools = if (cfg.freeProvider == FreeProviderGuard.GROQ) JSONArray()
+        else if (quiet) LlmClient.toolSpecs(*host.workTools(workTerritory).toTypedArray())
         else LlmClient.toolSpecs(*host.toolLists().toTypedArray())
         locatorOffered = (0 until tools.length()).any { tools.optJSONObject(it)?.optJSONObject("function")?.optString("name") == "tap_target" }
         var lastSignature = ""
@@ -1706,11 +1725,16 @@ class LocalBrain(
      * [reseatPersona] picks up entering or leaving one without knowing scenes
      * exist. A pref naming a scene that was deleted reads as no scene.
      */
-    private fun systemPrompt(): String = LocalPrompt.withPersona(
-        host.persona(),
-        host.activeSceneName()?.let { host.scene(it) },
-        host.platformPrompt(),
-    )
+    private fun systemPrompt(): String =
+        if (cfg.freeProvider == FreeProviderGuard.GROQ) {
+            LocalPrompt.groqChat(host.persona())
+        } else {
+            LocalPrompt.withPersona(
+                host.persona(),
+                host.activeSceneName()?.let { host.scene(it) },
+                host.platformPrompt(),
+            )
+        }
 
     /**
      * The user swiped to a different character mid-conversation; make the model
@@ -1801,7 +1825,7 @@ class LocalBrain(
      * at once is why this costs no more than the sweep would have.
      */
     private fun maybeHarvest() {
-        if (cfg.apiKey.isEmpty()) return
+        if (cfg.freeProvider == FreeProviderGuard.GROQ || cfg.apiKey.isEmpty()) return
         if (history.size <= MAX_HISTORY && historyChars() <= MAX_HISTORY_CHARS) return
         if (history.size == lastHarvestAtSize) {
             // Already tried at this size — a tail that cannot shrink (one huge

@@ -50,11 +50,12 @@ class FreeProviderGuardTest {
     }
 
     @Test fun groqErrorHintsAreSafeAndActionable() {
-        for (code in listOf(400, 401, 403, 404, 429, 503)) {
+        for (code in listOf(400, 401, 403, 404, 413, 429, 503)) {
             val hint = FreeProviderGuard.groqErrorHint(code)
             assertTrue(hint.isNotBlank())
             assertFalse(hint.contains("sk-"))
         }
+        assertTrue(FreeProviderGuard.groqErrorHint(413).contains("payload too large"))
         assertTrue(FreeProviderGuard.groqErrorHint(429).contains("limit"))
         assertTrue(FreeProviderGuard.groqErrorHint(401).contains("API key"))
     }

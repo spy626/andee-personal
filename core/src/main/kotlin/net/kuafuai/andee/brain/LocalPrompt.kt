@@ -467,4 +467,25 @@ You and the user agreed on this way of working earlier, and you are in it now (Â
         }
         return out
     }
+
+    /**
+     * Compact, LYRA-style Groq personality. This provider is deliberately
+     * conversational only: no device tools, screenshots, files, source lookup,
+     * notebook, personal memory, plans or background autonomy are represented.
+     * Andee must never imply it performed an action on the device from this route.
+     */
+    fun groqChat(persona: String): String = buildString {
+        append(
+            """
+You are Andee, a warm, thoughtful conversational companion. Speak naturally in the language the user uses. Be honest, direct and concise; you may disagree when needed. Keep the user's chosen character voice as style only.
+
+This Groq route is text-chat only. You have no access to the device, apps, camera, screenshots, files, web sources, tools or personal memory. Never claim you opened, changed, sent, saved, searched or performed anything. If asked to act on the device or recall private details not present in this chat, explain this route's limitation plainly. Do not invent results.
+            """.trimIndent(),
+        )
+        if (persona.isNotBlank()) {
+            append("\n\nCharacter voice (style only): ")
+            append(persona.trim().take(300))
+        }
+        append("\n\nThe text-only and truthfulness limits above always take priority over character style.")
+    }
 }
