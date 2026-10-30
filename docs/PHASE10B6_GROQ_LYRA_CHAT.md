@@ -2,6 +2,8 @@
 
 Base: Phase 10B.5 `b3890f8cc3eb37bc43106eaa65f6c5b73a62a047`. This is a separate branch; `main` is untouched.
 
+**Supersedes:** Earlier Phase 10B.1 / 10B.5 notes described Groq using Andee's tool-calling loop. This phase intentionally replaces that Groq-only behavior with the LYRA-style text-chat contract; other providers keep the original agent loop.
+
 ## Why
 
 The phone recording showed Groq returning HTTP 413. The previous Andee route sent the full LocalPrompt, long history, notebook/plan indexes and the device's large tool catalogue on every request. A one-word greeting could therefore carry a very large payload. Groq documents 413 as a request body that is too large; GPT-OSS Free limits are also tight, so this route must not inherit Andee's full agent context.
