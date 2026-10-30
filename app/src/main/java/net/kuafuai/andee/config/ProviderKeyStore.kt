@@ -19,6 +19,7 @@ import javax.crypto.spec.GCMParameterSpec
  * Never save keys in voice_prefs, debug logs, the Hub, or BuildConfig.
  */
 object ProviderKeyStore {
+    const val GEMINI_LIVE = "gemini_live"
     private const val KEY_ALIAS = "andee-free-llm-keys-v1"
     private const val PREF = "andee_free_provider_keys"
     private const val KEYSTORE = "AndroidKeyStore"
