@@ -42,6 +42,13 @@ class GroqChatContextTest {
         assertTrue(actual.first().optString("content").length <= GroqChatContext.MAX_SYSTEM_CHARS)
     }
 
+    @Test fun clippingKeepsBothOpeningContextAndFinalQuestion() {
+        val clipped = GroqChatContext.clip("BEGIN " + "x".repeat(200) + " FINAL QUESTION", 40)
+        assertTrue(clipped.startsWith("BEGIN"))
+        assertTrue(clipped.contains("FINAL QUESTION"))
+        assertTrue(clipped.length <= 40)
+    }
+
     @Test fun groqPromptDoesNotAdvertiseDeviceOrMemoryCapabilities() {
         val prompt = LocalPrompt.groqChat("playful voice")
         assertTrue(prompt.contains("text-chat only"))
