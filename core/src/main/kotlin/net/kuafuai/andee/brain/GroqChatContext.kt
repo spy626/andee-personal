@@ -5,10 +5,10 @@ import org.json.JSONObject
 /**
  * Request budget for the Groq Free chat-only route.
  *
- * Groq's documented GPT-OSS Free tier is 8,000 tokens/minute. Keep the
- * submitted dialogue deliberately far below that ceiling and reserve a
- * bounded completion. This is a chat context policy, not a destructive edit
- * to Andee's normal agent history: other providers keep their full history.
+ * Groq defines HTTP 413 as a request body that is too large. Keep the
+ * submitted dialogue deliberately compact and reserve a bounded completion.
+ * This is a chat context policy, not a destructive edit to Andee's normal
+ * agent history: other providers keep their full history.
  */
 object GroqChatContext {
     const val MAX_COMPLETION_TOKENS = 512
