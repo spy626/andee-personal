@@ -62,7 +62,7 @@ for token in (
     "LocalPrompt.groqChat(host.persona())",
     "kind != TurnKind.USER",
     "JSONArray()",
-    "userText.take(GroqChatContext.MAX_USER_CHARS)",
+    "GroqChatContext.clip(userText, GroqChatContext.MAX_USER_CHARS)",
     "Groq Free is text-only in Andee",
     "cfg.freeProvider == FreeProviderGuard.GROQ || cfg.apiKey.isEmpty()",
     "if (cfg.freeProvider == FreeProviderGuard.GROQ) return",
