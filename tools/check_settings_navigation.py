@@ -55,6 +55,13 @@ allowed = {
     # Phase 10B.5: Back overlay priority + fail-closed Groq/quota diagnostics.
     "tools/check_phase10b5.py",
     "docs/PHASE10B5_BACK_GROQ_QUOTA.md",
+    # Phase 10B.7: explicitly reviewed Gemini Live voice transport and focused tests.
+    "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveSession.kt",
+    "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveTokenProvider.kt",
+    "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveToolAdapter.kt",
+    "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveVoiceController.kt",
+    "app/src/test/java/net/kuafuai/andee/audio/GeminiLiveTokenProviderTest.kt",
+    "app/src/test/java/net/kuafuai/andee/audio/GeminiLiveToolAdapterTest.kt",
     # Phase 10B.6: bounded LYRA-style Groq text-chat implementation.
     "core/src/main/kotlin/net/kuafuai/andee/brain/LocalPrompt.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/GroqChatContext.kt",
