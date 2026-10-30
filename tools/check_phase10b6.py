@@ -67,7 +67,7 @@ assert "Never claim" in prompt
 
 guard = read("core/src/main/kotlin/net/kuafuai/andee/brain/FreeProviderGuard.kt")
 assert '413 -> "request payload too large' in guard
-assert "No automatic paid fallback" in guard
+assert "no automatic paid fallback" in guard
 
 unit = read("core/src/test/kotlin/net/kuafuai/andee/brain/GroqChatContextTest.kt")
 for token in ("keepsOnlySystemAndRecentPlainTextDialogue",
