@@ -38,8 +38,8 @@ object GroqChatContext {
             .filter { it.optString("role") == "user" || it.optString("role") == "assistant" }
             .filter { it.opt("content") is String }
             .filter { it.optString("content").isNotBlank() }
-            .takeLast(MAX_MESSAGES)
             .toList()
+            .takeLast(MAX_MESSAGES)
 
         val kept = mutableListOf<JSONObject>()
         for (message in candidates.asReversed()) {
