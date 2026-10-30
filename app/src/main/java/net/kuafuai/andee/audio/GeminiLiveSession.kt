@@ -148,20 +148,24 @@ class GeminiLiveSession(
                     ?.takeIf { it.isNotBlank() }?.let(listener::onInputTranscript)
                 content.optJSONObject("outputTranscription")?.optString("text")
                     ?.takeIf { it.isNotBlank() }?.let(listener::onOutputTranscript)
-                if (content.optBoolean("turnComplete") || content.optBoolean("generationComplete")) {
-                    listener.onTurnComplete()
-                }
-                val parts = content.optJSONObject("modelTurn")?.optJSONArray("parts") ?: return@let
-                for (i in 0 until parts.length()) {
-                    val part = parts.optJSONObject(i) ?: continue
-                    part.optString("text").takeIf { it.isNotBlank() }?.let(listener::onText)
-                    val inline = part.optJSONObject("inlineData") ?: continue
-                    if (inline.optString("mimeType").startsWith("audio/pcm")) {
-                        val encoded = inline.optString("data")
-                        if (encoded.isNotBlank()) {
-                            listener.onAudio(Base64.decode(encoded, Base64.DEFAULT))
+                val parts = content.optJSONObject("modelTurn")?.optJSONArray("parts")
+                if (parts != null) {
+                    for (i in 0 until parts.length()) {
+                        val part = parts.optJSONObject(i) ?: continue
+                        part.optString("text").takeIf { it.isNotBlank() }?.let(listener::onText)
+                        val inline = part.optJSONObject("inlineData") ?: continue
+                        if (inline.optString("mimeType").startsWith("audio/pcm")) {
+                            val encoded = inline.optString("data")
+                            if (encoded.isNotBlank()) {
+                                listener.onAudio(Base64.decode(encoded, Base64.DEFAULT))
+                            }
                         }
                     }
+                }
+                // Notify only after this message's final audio chunks have been
+                // handed to the playback queue.
+                if (content.optBoolean("turnComplete") || content.optBoolean("generationComplete")) {
+                    listener.onTurnComplete()
                 }
             }
             root.optJSONObject("toolCallCancellation")?.let { cancellation ->
