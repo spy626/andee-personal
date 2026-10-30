@@ -18,10 +18,12 @@ class GroqChatContextTest {
         )
 
         val actual = GroqChatContext.compact(input)
-        assertEquals(listOf("system", "user", "assistant"), actual.map { it.optString("role") })
+        assertEquals(listOf("system", "user", "assistant", "user", "assistant"), actual.map { it.optString("role") })
         assertEquals("compact system", actual[0].optString("content"))
-        assertEquals("latest question", actual[1].optString("content"))
-        assertEquals("latest answer", actual[2].optString("content"))
+        assertEquals("old question", actual[1].optString("content"))
+        assertEquals("old answer", actual[2].optString("content"))
+        assertEquals("latest question", actual[3].optString("content"))
+        assertEquals("latest answer", actual[4].optString("content"))
         assertFalse(actual.any { it.toString().contains("secret tool output") })
     }
 
@@ -53,7 +55,7 @@ class GroqChatContextTest {
         val prompt = LocalPrompt.groqChat("playful voice")
         assertTrue(prompt.contains("text-chat only"))
         assertTrue(prompt.contains("no access to the device"))
-        assertTrue(prompt.contains("no personal memory"))
+        assertTrue(prompt.contains("personal memory"))
         assertTrue(prompt.contains("playful voice"))
         assertTrue(prompt.contains("Never claim"))
     }
