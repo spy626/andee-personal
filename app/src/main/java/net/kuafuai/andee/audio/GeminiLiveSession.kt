@@ -35,6 +35,7 @@ class GeminiLiveSession(
         fun onText(text: String)
         fun onInputTranscript(text: String)
         fun onOutputTranscript(text: String)
+        fun onTurnComplete()
         fun onAudio(pcm24Khz: ByteArray)
         fun onFunctionCall(id: String, name: String, args: JSONObject)
         fun onInterrupted()
@@ -147,6 +148,9 @@ class GeminiLiveSession(
                     ?.takeIf { it.isNotBlank() }?.let(listener::onInputTranscript)
                 content.optJSONObject("outputTranscription")?.optString("text")
                     ?.takeIf { it.isNotBlank() }?.let(listener::onOutputTranscript)
+                if (content.optBoolean("turnComplete") || content.optBoolean("generationComplete")) {
+                    listener.onTurnComplete()
+                }
                 val parts = content.optJSONObject("modelTurn")?.optJSONArray("parts") ?: return@let
                 for (i in 0 until parts.length()) {
                     val part = parts.optJSONObject(i) ?: continue
