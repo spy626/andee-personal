@@ -32,6 +32,7 @@ class GeminiLiveVoiceController(
         fun onReady()
         fun onInputTranscript(text: String)
         fun onOutputTranscript(text: String)
+        fun onTurnComplete()
         fun onFailure(message: String)
         fun onStopped()
     }
@@ -91,6 +92,10 @@ class GeminiLiveVoiceController(
                             if (!closed.get()) listener.onOutputTranscript(text)
                         }
 
+                        override fun onTurnComplete() {
+                            if (!closed.get()) listener.onTurnComplete()
+                        }
+
                         override fun onAudio(pcm24Khz: ByteArray) {
                             if (closed.get() || pcm24Khz.isEmpty()) return
                             try {
@@ -105,13 +110,19 @@ class GeminiLiveVoiceController(
 
                         override fun onFunctionCall(id: String, name: String, args: JSONObject) {
                             if (closed.get()) return
-                            toolWorker.execute {
-                                // Cancellation can prevent a queued action from
-                                // starting. Once dispatch has begun, Android work
-                                // is not safely reversible.
-                                if (closed.get() || cancelledToolCalls.remove(id)) return@execute
-                                val current = session ?: return@execute
-                                GeminiLiveToolAdapter.dispatchAndRespond(host, current, id, name, args)
+                            try {
+                                toolWorker.execute {
+                                    // Cancellation can prevent a queued action from
+                                    // starting. Once dispatch has begun, Android work
+                                    // is not safely reversible.
+                                    if (closed.get() || cancelledToolCalls.remove(id)) return@execute
+                                    val current = session ?: return@execute
+                                    GeminiLiveToolAdapter.dispatchAndRespond(host, current, id, name, args)
+                                }
+                            } catch (_: java.util.concurrent.RejectedExecutionException) {
+                                // Stop may shut the queue between the closed check
+                                // above and execute(); a late tool call must be inert.
+                                android.util.Log.i(TAG, "Ignored tool call after session shutdown")
                             }
                         }
 
