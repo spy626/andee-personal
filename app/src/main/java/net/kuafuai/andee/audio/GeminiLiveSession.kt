@@ -174,7 +174,7 @@ class GeminiLiveSession(
     }
 
     companion object {
-        const val DEFAULT_MODEL = "gemini-2.5-flash-native-audio-preview-12-2025"
+        const val DEFAULT_MODEL = "gemini-3.8-live"
         private const val ENDPOINT =
             "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
     }
