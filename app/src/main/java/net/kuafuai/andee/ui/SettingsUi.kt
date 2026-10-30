@@ -239,7 +239,11 @@ class SettingsUi(
         closing = null
         if (root != null) return
 
-        saved = VoiceConfig.current(context)
+        saved = VoiceConfig.current(context) + mapOf(
+            "free_key_${ProviderKeyStore.GEMINI_LIVE}" to runCatching {
+                ProviderKeyStore.get(context, ProviderKeyStore.GEMINI_LIVE)
+            }.getOrDefault(""),
+        )
         stagedFields.clear()
         stagedPicks.clear()
         page = Page.HOME
