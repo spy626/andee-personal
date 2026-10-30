@@ -24,6 +24,7 @@ class GeminiLiveVoiceController(
     private val host: BrainHost,
     private val listener: Listener,
     private val model: String = GeminiLiveSession.DEFAULT_MODEL,
+    private val voice: String = GeminiLiveSession.DEFAULT_VOICE,
     private val tokenProvider: GeminiLiveTokenProvider = GeminiLiveTokenProvider(),
 ) {
     interface Listener {
@@ -65,6 +66,7 @@ class GeminiLiveVoiceController(
                 val live = GeminiLiveSession(
                     ephemeralToken = token,
                     model = model,
+                    voice = voice,
                     tools = declarations,
                     listener = object : GeminiLiveSession.Listener {
                         override fun onReady() {
