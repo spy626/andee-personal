@@ -194,6 +194,9 @@
     <string name="settings_voice_hear_provider">Hearing</string>
     <string name="settings_voice_speak_provider">Speaking</string>
     <string name="settings_voice_provider_system">System</string>
+    <string name="settings_gemini_live_api_key">Gemini Live API key</string>
+    <string name="settings_gemini_live_api_key_hint">Your own Google AI Studio API key</string>
+    <string name="settings_gemini_live_key_note">Stored encrypted on this device with Android Keystore. The app still uses the key at runtime; do not share your APK or key.</string>
     <string name="settings_google_api_key">Google API key</string>
     <string name="settings_google_api_key_hint">Vertex Express key — hearing and Google speaking both use it</string>
     <string name="settings_google_key_builtin">Built in at package time — leave blank to use it</string>
