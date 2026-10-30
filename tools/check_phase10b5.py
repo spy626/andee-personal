@@ -50,17 +50,24 @@ paths={
     "tools/check_xkiro_catalog_fix.py",
     "tools/check_xkiro_auto_scope.py",
     "tools/check_android_back_scope.py",
+    # Phase 10B.7: reviewed Gemini Live voice transport, encrypted key/config and focused tests.
+    "app/src/main/java/net/kuafuai/andee/BodyCoreService.kt",
+    "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveSession.kt",
+    "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveTokenProvider.kt",
+    "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveToolAdapter.kt",
+    "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveVoiceController.kt",
+    "app/src/main/java/net/kuafuai/andee/config/ProviderKeyStore.kt",
+    "app/src/main/java/net/kuafuai/andee/config/VoiceConfig.kt",
+    "app/src/main/java/net/kuafuai/andee/ui/SettingsUi.kt",
+    "app/src/test/java/net/kuafuai/andee/audio/GeminiLiveTokenProviderTest.kt",
+    "app/src/test/java/net/kuafuai/andee/audio/GeminiLiveToolAdapterTest.kt",
 }
 changed=set(git("diff","--name-only",BASE,"HEAD").splitlines())
 assert changed<=paths, f"Unreviewed change: {sorted(changed-paths)}"
 assert not git("diff","--diff-filter=D","--name-only",BASE,"HEAD"), "Deleted source"
 for p in (
-    "app/src/main/java/net/kuafuai/andee/BodyCoreService.kt",
-    "app/src/main/java/net/kuafuai/andee/config/VoiceConfig.kt",
-    "app/src/main/java/net/kuafuai/andee/config/ProviderKeyStore.kt",
     "app/src/main/java/net/kuafuai/andee/config/Vault.kt",
     "app/src/main/java/net/kuafuai/andee/config/VaultBioGate.kt",
-    "app/src/main/java/net/kuafuai/andee/ui/SettingsUi.kt",
     "app/src/main/java/net/kuafuai/andee/ui/TextInputActivity.kt",
     "app/src/main/java/net/kuafuai/andee/net/CommandDispatcher.kt",
     "app/src/main/java/net/kuafuai/andee/device/DeviceCommsController.kt",
