@@ -33,6 +33,13 @@ allowed = {
     "tools/check_xkiro_catalog_fix.py",
     "tools/check_xkiro_auto_scope.py",
     "tools/check_android_back_scope.py",
+    # Phase 10B.7: explicitly reviewed Gemini Live voice transport and focused tests.
+    "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveSession.kt",
+    "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveTokenProvider.kt",
+    "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveToolAdapter.kt",
+    "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveVoiceController.kt",
+    "app/src/test/java/net/kuafuai/andee/audio/GeminiLiveTokenProviderTest.kt",
+    "app/src/test/java/net/kuafuai/andee/audio/GeminiLiveToolAdapterTest.kt",
     "docs/PHASE10B6_GROQ_LYRA_CHAT.md",
     ".github/workflows/build.yml",
 }
