@@ -19,6 +19,20 @@ object GroqChatContext {
     const val MAX_MESSAGES = 8
 
     /**
+     * Clip without losing either the opening context or a question at the end.
+     */
+    fun clip(text: String, maxChars: Int): String {
+        if (maxChars <= 0) return ""
+        if (text.length <= maxChars) return text
+        val marker = "\n[…]\n"
+        if (maxChars <= marker.length) return text.take(maxChars)
+        val available = maxChars - marker.length
+        val head = available / 2
+        val tail = available - head
+        return text.take(head) + marker + text.takeLast(tail)
+    }
+
+    /**
      * Keep one compact system instruction and the newest plain-text user /
      * assistant turns. Tool, function, multimodal and internal messages are
      * excluded rather than partially serialised.
@@ -51,7 +65,7 @@ object GroqChatContext {
             if (take <= 0) continue
             kept += JSONObject()
                 .put("role", role)
-                .put("content", content.takeLast(take))
+                .put("content", clip(content, take))
             remaining -= take
         }
         result.addAll(kept.asReversed())
