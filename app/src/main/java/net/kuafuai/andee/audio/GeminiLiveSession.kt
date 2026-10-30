@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * action execution must go through AndroidBrainHost.dispatch().
  */
 class GeminiLiveSession(
-    private val apiKey: String,
+    private val ephemeralToken: String,
     private val model: String = DEFAULT_MODEL,
     private val listener: Listener,
     private val tools: JSONArray = JSONArray(),
@@ -47,10 +47,10 @@ class GeminiLiveSession(
     @Volatile private var ready = false
 
     fun connect(systemInstruction: String) {
-        require(apiKey.isNotBlank()) { "Gemini API key is missing" }
+        require(ephemeralToken.isNotBlank()) { "Gemini Live ephemeral token is missing" }
         require(model.isNotBlank()) { "Gemini Live model is missing" }
         val url = ENDPOINT.toHttpUrl().newBuilder()
-            .addQueryParameter("key", apiKey)
+            .addQueryParameter("access_token", ephemeralToken)
             .build()
         val request = Request.Builder().url(url).build()
         socket = client.newWebSocket(request, object : WebSocketListener() {
@@ -176,6 +176,6 @@ class GeminiLiveSession(
     companion object {
         const val DEFAULT_MODEL = "gemini-3.8-live"
         private const val ENDPOINT =
-            "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
+            "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained"
     }
 }
