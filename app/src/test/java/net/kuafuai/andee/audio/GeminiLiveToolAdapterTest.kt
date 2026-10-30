@@ -31,6 +31,7 @@ class GeminiLiveToolAdapterTest {
         assertEquals(1, declarations.length())
         assertEquals("market_search", declaration.getString("name"))
         assertEquals("Search the market", declaration.getString("description"))
+        assertEquals("BLOCKING", declaration.getString("behavior"))
         assertTrue(declaration.has("parameters"))
         assertFalse(declaration.has("method"))
         assertFalse(declaration.has("localOnly"))
