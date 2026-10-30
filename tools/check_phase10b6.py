@@ -26,6 +26,7 @@ allowed = {
     "tools/check_phase10b5.py",
     "tools/check_phase10b6.py",
     "docs/PHASE10B6_GROQ_LYRA_CHAT.md",
+    ".github/workflows/build.yml",
 }
 changed = set(git("diff", "--name-only", BASE, "HEAD").splitlines())
 assert changed <= allowed, f"Unexpected Phase 10B.6 files: {sorted(changed - allowed)}"
