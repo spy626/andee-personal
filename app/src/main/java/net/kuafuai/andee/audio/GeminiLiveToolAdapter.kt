@@ -21,7 +21,7 @@ object GeminiLiveToolAdapter {
                 if (!isValidName(name) || !seen.add(name)) continue
                 val declaration = JSONObject()
                     .put("name", name)
-                    .put("description", source.optString("description"))
+                    .put("description", source.optString("description")).put("behavior", "BLOCKING")
                 source.optJSONObject("parameters")?.let { declaration.put("parameters", it) }
                 declarations.put(declaration)
             }
@@ -55,11 +55,17 @@ object GeminiLiveToolAdapter {
                 is JSONObject -> result
                 is JSONArray -> JSONObject().put("result", result)
                 null -> JSONObject().put("result", JSONObject.NULL)
-                else -> JSONObject().put("result", result)
+                else -> JSONObject().put("result", JSONObject.wrap(result))
             }
         } catch (t: Throwable) {
             error(t.message?.takeIf { it.isNotBlank() } ?: "Tool execution failed")
         }
+    }
+
+
+    fun dispatchAndRespond(host: BrainHost, session: GeminiLiveSession, callId: String, toolName: String, args: JSONObject): Boolean {
+        val result = dispatch(host, callId, toolName, args)
+        return session.sendToolResponse(callId, toolName, result)
     }
 
     private fun error(message: String) = JSONObject()
