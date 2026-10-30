@@ -89,7 +89,7 @@ class GeminiLiveSession(
         return socket?.send(JSONObject().put("realtimeInput", JSONObject()
             .put("audio", JSONObject()
                 .put("mimeType", "audio/pcm;rate=16000")
-                .put("data", Base64.encodeToString(pcm16Khz, Base64.NO_WRAP))))
+                .put("data", Base64.encodeToString(pcm16Khz, Base64.NO_WRAP)))).toString())
             ?: false
     }
 
