@@ -57,6 +57,7 @@ allow = {
     "app/src/test/java/net/kuafuai/andee/audio/GeminiLiveTokenProviderTest.kt",
     "app/src/test/java/net/kuafuai/andee/audio/GeminiLiveToolAdapterTest.kt",
     # Reviewed Phase 10B.3 production routing is byte-scoped separately.
+    "app/src/main/java/net/kuafuai/andee/config/ProviderKeyStore.kt",
     "app/src/main/java/net/kuafuai/andee/config/VoiceConfig.kt",
     "app/src/main/java/net/kuafuai/andee/ui/SettingsUi.kt",
     "app/src/main/res/values/strings.xml",
@@ -70,8 +71,6 @@ assert not git("diff", "--diff-filter=D", "--name-only", BASE, "HEAD"), "Deleted
 
 for path in (
 
-
-    "app/src/main/java/net/kuafuai/andee/config/ProviderKeyStore.kt",
 
     "app/src/main/java/net/kuafuai/andee/config/FactoryReset.kt",
     "app/src/main/java/net/kuafuai/andee/config/Vault.kt",
@@ -87,6 +86,13 @@ for path in (
     "core/src/main/kotlin/net/kuafuai/andee/tts/GoogleTts.kt",
 ):
     assert git("rev-parse", f"{BASE}:{path}") == git("rev-parse", f"HEAD:{path}"), f"Original Andee production behavior changed: {path}"
+
+# Phase 10B.7 adds only the Gemini Live slot to the existing encrypted key store;
+# keep every previously supported provider slot present.
+key_store = source("app/src/main/java/net/kuafuai/andee/config/ProviderKeyStore.kt")
+for provider in ("FreeProviderGuard.XKIRO", "FreeProviderGuard.GROQ", "FreeProviderGuard.OPENROUTER", "GEMINI_LIVE"):
+    assert provider in key_store, f"Existing encrypted provider key slot missing: {provider}"
+assert "AES/GCM/NoPadding" in key_store and "AndroidKeyStore" in key_store
 
 guard = source("core/src/main/kotlin/net/kuafuai/andee/brain/FreeProviderGuard.kt")
 assert 'const val XKIRO_DEEPSEEK = "deepseek/deepseek-v4.1-flash:free"' in guard
