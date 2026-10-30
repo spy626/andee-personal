@@ -13,6 +13,7 @@ def data(path):
     return (ROOT / path).read_text(encoding="utf-8")
 
 allowed = {
+    "app/src/main/java/net/kuafuai/andee/config/ProviderKeyStore.kt",
     "app/src/main/java/net/kuafuai/andee/config/VoiceConfig.kt",
     "app/src/main/java/net/kuafuai/andee/ui/SettingsUi.kt",
     "app/src/main/res/values/strings.xml",
@@ -65,7 +66,6 @@ for path in (
 
     "app/src/main/java/net/kuafuai/andee/config/Vault.kt",
     "app/src/main/java/net/kuafuai/andee/config/VaultBioGate.kt",
-    "app/src/main/java/net/kuafuai/andee/config/ProviderKeyStore.kt",
     "app/src/main/java/net/kuafuai/andee/config/FactoryReset.kt",
     "app/src/main/java/net/kuafuai/andee/net/CommandDispatcher.kt",
     "app/src/main/java/net/kuafuai/andee/device/DeviceCommsController.kt",
@@ -116,6 +116,12 @@ for tok in (
     assert tok in llm, f"Missing protected LLM auto route: {tok}"
 assert llm.index('FreeProviderGuard.preflightXKiroAuto(http, apiKey, needsVision)') < llm.index('val req = Request.Builder()',llm.index('fun complete('))
 assert '"deepseek/deepseek-v4.1-flash:free"' not in llm, "Retired DeepSeek must not reach model executor"
+
+# Gemini Live adds a slot without changing the existing encrypted key mechanism.
+key_store = data("app/src/main/java/net/kuafuai/andee/config/ProviderKeyStore.kt")
+for provider in ("FreeProviderGuard.XKIRO", "FreeProviderGuard.GROQ", "FreeProviderGuard.OPENROUTER", "GEMINI_LIVE"):
+    assert provider in key_store, f"Encrypted provider slot missing: {provider}"
+assert "AES/GCM/NoPadding" in key_store and "AndroidKeyStore" in key_store
 
 ui = data("app/src/main/java/net/kuafuai/andee/ui/SettingsUi.kt")
 assert 'FreeProviderGuard.XKIRO -> listOf("Auto Free", "Qwen Free")' in ui
