@@ -53,6 +53,7 @@ object VoiceConfig {
             // which is the only way back to a baked-in key.
             "google_api_key", "google_project", "google_base_url", "google_location",
             "google_asr_model", "google_tts_model", "google_language",
+            "gemini_live_model", "gemini_live_voice", "gemini_live_personality",
         )
 
         const val DEFAULT_ASR_ENDPOINT = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async"
@@ -729,6 +730,9 @@ object VoiceConfig {
                 "google_asr_model" to p.getString("google_asr_model", "").orEmpty(),
                 "google_tts_model" to p.getString("google_tts_model", "").orEmpty(),
                 "google_language" to p.getString("google_language", "").orEmpty(),
+                "gemini_live_model" to p.getString("gemini_live_model", net.kuafuai.andee.audio.GeminiLiveSession.DEFAULT_MODEL).orEmpty(),
+                "gemini_live_voice" to p.getString("gemini_live_voice", "Kore").orEmpty(),
+                "gemini_live_personality" to p.getString("gemini_live_personality", "friend").orEmpty(),
                 "hub_url" to hc.url,
                 "hub_public_key" to hc.publicKey,
                 "device_id" to hc.deviceId,
