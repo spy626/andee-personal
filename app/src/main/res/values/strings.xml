@@ -171,6 +171,9 @@
     <string name="settings_voice_hear_provider">识别（听）</string>
     <string name="settings_voice_speak_provider">朗读（说）</string>
     <string name="settings_voice_provider_system">系统</string>
+    <string name="settings_gemini_live_api_key">Gemini Live API Key</string>
+    <string name="settings_gemini_live_api_key_hint">你自己的 Google AI Studio API Key</string>
+    <string name="settings_gemini_live_key_note">使用 Android Keystore 在本机加密保存。应用运行时仍需使用此密钥，请勿分享 APK 或密钥。</string>
     <string name="settings_google_api_key">Google API Key</string>
     <string name="settings_google_api_key_hint">Vertex Express Key，识别和 Google 朗读都用它</string>
     <string name="settings_google_key_builtin">已内置(编译时写入),留空即用它</string>
