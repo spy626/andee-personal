@@ -9,6 +9,7 @@ import org.json.JSONObject
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Owns one Gemini Live voice session around Andee's existing AudioIO.
@@ -37,6 +38,8 @@ class GeminiLiveVoiceController(
     private val appContext = context.applicationContext
     private val closed = AtomicBoolean(true)
     private val playbackStarted = AtomicBoolean(false)
+    /** IDs cancelled by the server before their queued Android action begins. */
+    private val cancelledToolCalls = ConcurrentHashMap.newKeySet<String>()
     private val worker: ExecutorService = Executors.newSingleThreadExecutor { r ->
         Thread(r, "GeminiLiveVoice").apply { isDaemon = true }
     }
@@ -101,7 +104,10 @@ class GeminiLiveVoiceController(
                         override fun onFunctionCall(id: String, name: String, args: JSONObject) {
                             if (closed.get()) return
                             toolWorker.execute {
-                                if (closed.get()) return@execute
+                                // Cancellation can prevent a queued action from
+                                // starting. Once dispatch has begun, Android work
+                                // is not safely reversible.
+                                if (closed.get() || cancelledToolCalls.remove(id)) return@execute
                                 val current = session ?: return@execute
                                 GeminiLiveToolAdapter.dispatchAndRespond(host, current, id, name, args)
                             }
@@ -113,8 +119,10 @@ class GeminiLiveVoiceController(
                         }
 
                         override fun onToolCallCancelled(ids: List<String>) {
-                            // Dispatch already-running device actions cannot be rolled back safely.
-                            // Cancellation prevents queued calls from being started by the worker.
+                            // The worker checks this set immediately before dispatch,
+                            // so a call still waiting in the queue will not touch Android.
+                            // A call already inside CommandDispatcher cannot be rolled back.
+                            cancelledToolCalls.addAll(ids)
                             android.util.Log.i(TAG, "Gemini cancelled ${ids.size} pending tool call(s)")
                         }
 
@@ -145,6 +153,9 @@ class GeminiLiveVoiceController(
         playbackStarted.set(false)
         session?.close()
         session = null
+        worker.shutdownNow()
+        toolWorker.shutdown()
+        cancelledToolCalls.clear()
         listener.onStopped()
     }
 
@@ -155,6 +166,9 @@ class GeminiLiveVoiceController(
         playbackStarted.set(false)
         session?.close()
         session = null
+        worker.shutdownNow()
+        toolWorker.shutdown()
+        cancelledToolCalls.clear()
         listener.onFailure(message)
     }
 
@@ -165,6 +179,9 @@ class GeminiLiveVoiceController(
         audio.stopStreamPlayback()
         playbackStarted.set(false)
         session = null
+        worker.shutdownNow()
+        toolWorker.shutdown()
+        cancelledToolCalls.clear()
         listener.onStopped()
     }
 
