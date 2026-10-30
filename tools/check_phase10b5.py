@@ -27,9 +27,18 @@ paths={
     "app/src/main/AndroidManifest.xml",
     "app/src/main/java/net/kuafuai/andee/ui/FloatingWindowUi.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/LlmClient.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/brain/LocalBrain.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/brain/LocalPrompt.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/brain/GroqChatContext.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/FreeProviderGuard.kt",
     "core/src/test/kotlin/net/kuafuai/andee/brain/FreeProviderGuardTest.kt",
+    "core/src/test/kotlin/net/kuafuai/andee/brain/GroqChatContextTest.kt",
+    "app/src/main/res/values/strings.xml",
+    "app/src/main/res/values-en/strings.xml",
     "tools/check_phase10b5.py",
+    "tools/check_free_provider_scope.py",
+    "tools/check_phase10b6.py",
+    "docs/PHASE10B6_GROQ_LYRA_CHAT.md",
     "docs/PHASE10B5_BACK_GROQ_QUOTA.md",
     ".github/workflows/build.yml",
     "tools/verify_feature_preservation.py",
@@ -57,7 +66,6 @@ for p in (
     "app/src/main/java/net/kuafuai/andee/device/DeviceCommsController.kt",
     "app/src/main/java/net/kuafuai/andee/device/NotificationRelayService.kt",
     "app/src/main/java/net/kuafuai/andee/screen/ScreenController.kt",
-    "core/src/main/kotlin/net/kuafuai/andee/brain/LocalBrain.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/SelfWork.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/Heartbeat.kt",
     "core/src/main/kotlin/net/kuafuai/andee/config/BrainConfig.kt",
@@ -92,14 +100,11 @@ for token in (
     assert token in llm, f"Missing fail-closed inference gate: {token}"
 assert llm.index('if (apiKey.isBlank())') < llm.index('val req = Request.Builder()')
 assert llm.index('if (freeProvider == FreeProviderGuard.GROQ && needsVision)') < llm.index('val req = Request.Builder()')
-assert 'body.put("tools", tools).put("tool_choice", "auto")' in llm
+assert 'if (tools.length() > 0 && freeProvider != FreeProviderGuard.GROQ)' in llm
+assert 'GroqChatContext.compact(messages)' in llm
+assert 'max_completion_tokens' in llm
 assert '"$baseUrl/chat/completions"' in llm
-# Precisely three reviewed changes in the existing client: missing key,
-# reject image for text-only Groq, sanitize Groq HTTP without raw body.
-llm_diff=git("diff","--unified=0",BASE,"HEAD","--",
-             "core/src/main/kotlin/net/kuafuai/andee/brain/LlmClient.kt")
-assert llm_diff.count("\n@@ ")==3, "Unreviewed Groq LLM behavior patch"
-assert "onMinimizeClick" not in llm_diff
+assert 'Groq text-chat returned unsupported tool calls' in llm
 
 guard=read("core/src/main/kotlin/net/kuafuai/andee/brain/FreeProviderGuard.kt")
 old_guard=orig("core/src/main/kotlin/net/kuafuai/andee/brain/FreeProviderGuard.kt")
