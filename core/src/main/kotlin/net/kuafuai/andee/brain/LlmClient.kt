@@ -157,13 +157,21 @@ class LlmClient(
      * @param noThinking ask without reasoning whatever the user's setting is.
      */
     fun complete(messages: List<JSONObject>, tools: JSONArray, noThinking: Boolean = false): Reply {
+        // LYRA-style Groq is an isolated text-chat route: compact recent dialogue,
+        // never attach Andee's device tool catalogue, notebook, files or screenshots.
+        val requestMessages = if (freeProvider == FreeProviderGuard.GROQ) {
+            GroqChatContext.compact(messages)
+        } else messages
         val msgArr = JSONArray()
-        for (m in messages) msgArr.put(m)
+        for (m in requestMessages) msgArr.put(m)
         val body = JSONObject()
             .put("model", model)
             .put("messages", msgArr)
             .put("stream", false)
-        if (tools.length() > 0) {
+        if (freeProvider == FreeProviderGuard.GROQ) {
+            body.put("max_completion_tokens", GroqChatContext.MAX_COMPLETION_TOKENS)
+        }
+        if (tools.length() > 0 && freeProvider != FreeProviderGuard.GROQ) {
             body.put("tools", tools).put("tool_choice", "auto")
         }
         if (freeProvider == "legacy") {
@@ -304,6 +312,12 @@ class LlmClient(
                     argumentsRaw = fn.optString("arguments"),
                 )
             }
+        }
+
+        if (freeProvider == FreeProviderGuard.GROQ && calls.isNotEmpty()) {
+            throw IllegalStateException(
+                "Groq text-chat returned unsupported tool calls; no device action was executed"
+            )
         }
 
         val usage = root.optJSONObject("usage")
