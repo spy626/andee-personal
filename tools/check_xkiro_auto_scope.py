@@ -18,6 +18,7 @@ allowed = {
     "app/src/main/res/values/strings.xml",
     "app/src/main/res/values-en/strings.xml",
     "app/src/androidTest/java/net/kuafuai/andee/acceptance/FreeProviderKeysTest.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/brain/LocalBrain.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/FreeProviderGuard.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/LlmClient.kt",
     "core/src/test/kotlin/net/kuafuai/andee/brain/FreeProviderGuardTest.kt",
@@ -65,7 +66,6 @@ for path in (
     "app/src/main/java/net/kuafuai/andee/screen/ScreenController.kt",
 
     "app/src/main/java/net/kuafuai/andee/ui/ball/EmotionBallTextureView.kt",
-    "core/src/main/kotlin/net/kuafuai/andee/brain/LocalBrain.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/SelfWork.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/Heartbeat.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/NotificationTriage.kt",
