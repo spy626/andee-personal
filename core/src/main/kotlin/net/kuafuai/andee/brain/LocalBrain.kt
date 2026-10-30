@@ -977,7 +977,7 @@ class LocalBrain(
         } else if (cfg.freeProvider == FreeProviderGuard.GROQ) {
             // No notebook, plan, selfhood, scene, page, topic, gear, friends,
             // device state or timestamp is sent to Groq. Only the user's words.
-            JSONObject().put("role", "user").put("content", userText.take(GroqChatContext.MAX_USER_CHARS))
+            JSONObject().put("role", "user").put("content", GroqChatContext.clip(userText, GroqChatContext.MAX_USER_CHARS))
         } else {
             // The notebook index rides in **here**, on the user message, and
             // not in the system prompt. `LocalPrompt` is a constant on purpose
