@@ -33,6 +33,7 @@ allowed={
     "tools/check_phase10b6.py",
     "core/src/test/kotlin/net/kuafuai/andee/brain/FreeProviderGuardTest.kt",
 
+    "core/src/main/kotlin/net/kuafuai/andee/brain/LocalBrain.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/FreeProviderGuard.kt",
 
     "core/src/main/kotlin/net/kuafuai/andee/brain/LlmClient.kt",
@@ -83,7 +84,6 @@ for p in (
     "app/src/main/java/net/kuafuai/andee/net/CommandDispatcher.kt",
     "app/src/main/java/net/kuafuai/andee/device/DeviceCommsController.kt",
     "app/src/main/java/net/kuafuai/andee/screen/ScreenController.kt",
-    "core/src/main/kotlin/net/kuafuai/andee/brain/LocalBrain.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/SelfWork.kt",
     "core/src/main/kotlin/net/kuafuai/andee/brain/Heartbeat.kt",
     "core/src/main/kotlin/net/kuafuai/andee/asr/GoogleAsr.kt",
