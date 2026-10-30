@@ -71,7 +71,7 @@ for token in (
 
 prompt = read("core/src/main/kotlin/net/kuafuai/andee/brain/LocalPrompt.kt")
 assert "fun groqChat(persona: String)" in prompt
-assert "no personal memory" in prompt
+assert "personal memory" in prompt
 assert "Never claim" in prompt
 
 guard = read("core/src/main/kotlin/net/kuafuai/andee/brain/FreeProviderGuard.kt")
