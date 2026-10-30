@@ -1132,6 +1132,16 @@ class BodyCoreService : Service() {
                     if (said.isEmpty()) return
                     ui.post {
                         if (exitRequested || geminiLive?.isActive() != true) return@post
+                        val normalized = said.lowercase(java.util.Locale.ROOT)
+                            .filter(Char::isLetterOrDigit)
+                        if (meeting.isActive() && normalized in setOf(
+                                "stopmeeting", "endmeeting", "stoptherecording", "endtherecording",
+                                "meetingstop", "meetingend",
+                            )
+                        ) {
+                            meeting.stopFromUser()
+                            return@post
+                        }
                         if (VoiceExitCommand.matches(said, true)) {
                             exitByVoice()
                             return@post
