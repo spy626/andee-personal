@@ -1146,6 +1146,19 @@ class BodyCoreService : Service() {
                             exitByVoice()
                             return@post
                         }
+                        // Preserve Andee's existing spoken-card contract. A visible
+                        // question/button gets first refusal; handled speech must not
+                        // also become a second free-form Gemini turn.
+                        val cardOutcome = net.kuafuai.andee.ui.CardUi.tryAnswerByVoice(said)
+                        if (cardOutcome != net.kuafuai.andee.ui.CardUi.VoiceOutcome.NOT_HANDLED) {
+                            geminiLive?.sendText(
+                                "The user answered the visible Andee card: \"$said\". " +
+                                    "Card outcome: ${cardOutcome.name}. Continue from that result; " +
+                                    "do not ask the same card question again."
+                            )
+                            window.setSubtitle(said, FloatingWindowUi.SubtitleKind.FINAL)
+                            return@post
+                        }
                         // Gemini owns recognition and response in this mode.
                         // Do not submit this transcript to the text brain again.
                         window.setSubtitle(said, FloatingWindowUi.SubtitleKind.FINAL)
@@ -1155,6 +1168,7 @@ class BodyCoreService : Service() {
                     val spoken = text.trim()
                     if (spoken.isNotEmpty()) ui.post {
                         if (!exitRequested && geminiLive?.isActive() == true) {
+                            window.setState(FloatingWindowUi.State.SPEAKING)
                             window.setSubtitle(spoken, FloatingWindowUi.SubtitleKind.FINAL)
                         }
                     }
