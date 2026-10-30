@@ -49,6 +49,13 @@ allow = {
 
     "app/src/main/java/net/kuafuai/andee/ui/FloatingWindowUi.kt",
     "app/src/main/java/net/kuafuai/andee/BodyCoreService.kt",
+    # Phase 10B.7: explicitly reviewed Gemini Live voice transport and focused tests.
+    "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveSession.kt",
+    "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveTokenProvider.kt",
+    "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveToolAdapter.kt",
+    "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveVoiceController.kt",
+    "app/src/test/java/net/kuafuai/andee/audio/GeminiLiveTokenProviderTest.kt",
+    "app/src/test/java/net/kuafuai/andee/audio/GeminiLiveToolAdapterTest.kt",
     # Reviewed Phase 10B.3 production routing is byte-scoped separately.
     "app/src/main/java/net/kuafuai/andee/config/VoiceConfig.kt",
     "app/src/main/java/net/kuafuai/andee/ui/SettingsUi.kt",
