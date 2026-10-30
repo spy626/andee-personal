@@ -22,6 +22,7 @@ class GeminiLiveSession(
     private val apiKey: String,
     private val model: String = DEFAULT_MODEL,
     private val listener: Listener,
+    private val tools: JSONArray = JSONArray(),
     private val client: OkHttpClient = OkHttpClient.Builder()
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .pingInterval(20, TimeUnit.SECONDS)
@@ -35,6 +36,7 @@ class GeminiLiveSession(
         fun onAudio(pcm24Khz: ByteArray)
         fun onFunctionCall(id: String, name: String, args: JSONObject)
         fun onInterrupted()
+        fun onToolCallCancelled(ids: List<String>)
         fun onClosed(code: Int, reason: String)
         fun onFailure(error: String)
     }
@@ -50,8 +52,7 @@ class GeminiLiveSession(
         val request = Request.Builder().url(url).build()
         socket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                val setup = JSONObject()
-                    .put("setup", JSONObject()
+                val setupConfig = JSONObject()
                         .put("model", "models/$model")
                         .put("generationConfig", JSONObject()
                             .put("responseModalities", JSONArray().put("AUDIO"))
@@ -61,8 +62,9 @@ class GeminiLiveSession(
                         .put("systemInstruction", JSONObject()
                             .put("parts", JSONArray().put(JSONObject().put("text", systemInstruction))))
                         .put("inputAudioTranscription", JSONObject())
-                        .put("outputAudioTranscription", JSONObject()))
-                webSocket.send(setup.toString())
+                        .put("outputAudioTranscription", JSONObject())
+                if (tools.length() > 0) setupConfig.put("tools", tools)
+                webSocket.send(JSONObject().put("setup", setupConfig).toString())
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -154,8 +156,11 @@ class GeminiLiveSession(
                     }
                 }
             }
-            root.optJSONObject("toolCallCancellation")?.let {
-                listener.onFailure("Gemini cancelled one or more tool calls")
+            root.optJSONObject("toolCallCancellation")?.let { cancellation ->
+                val ids = cancellation.optJSONArray("ids") ?: JSONArray()
+                listener.onToolCallCancelled((0 until ids.length()).mapNotNull {
+                    ids.optString(it).takeIf(String::isNotBlank)
+                })
             }
             root.optJSONObject("error")?.let {
                 listener.onFailure(it.optString("message", "Gemini Live protocol error"))
