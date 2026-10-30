@@ -76,6 +76,13 @@ allowed = {
     "tools/check_phase10b6.py",
     "app/src/main/java/net/kuafuai/andee/ui/FloatingWindowUi.kt",
     "app/src/main/java/net/kuafuai/andee/BodyCoreService.kt",
+    # Phase 10B.7: reviewed Gemini Live voice-only additions; no Vault/approval changes.
+    "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveSession.kt",
+    "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveTokenProvider.kt",
+    "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveToolAdapter.kt",
+    "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveVoiceController.kt",
+    "app/src/test/java/net/kuafuai/andee/audio/GeminiLiveTokenProviderTest.kt",
+    "app/src/test/java/net/kuafuai/andee/audio/GeminiLiveToolAdapterTest.kt",
 }
 actual = set(git("diff", "--name-only", PHASE8, "HEAD").splitlines())
 assert actual <= allowed, f"Unreviewed changes outside Vault: {sorted(actual - allowed)}"
