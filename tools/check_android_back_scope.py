@@ -32,6 +32,13 @@ allowed={
     "docs/PHASE10B6_GROQ_LYRA_CHAT.md",
     "tools/check_phase10b6.py",
     "core/src/test/kotlin/net/kuafuai/andee/brain/FreeProviderGuardTest.kt",
+    # Phase 10B.7: explicitly reviewed Gemini Live voice transport and focused tests.
+    "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveSession.kt",
+    "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveTokenProvider.kt",
+    "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveToolAdapter.kt",
+    "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveVoiceController.kt",
+    "app/src/test/java/net/kuafuai/andee/audio/GeminiLiveTokenProviderTest.kt",
+    "app/src/test/java/net/kuafuai/andee/audio/GeminiLiveToolAdapterTest.kt",
     # Phase 10B.6 adds provider-scope labels to Settings resources.
     "app/src/main/res/values/strings.xml",
     "app/src/main/res/values-en/strings.xml",
