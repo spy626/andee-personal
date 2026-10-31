@@ -21,6 +21,7 @@ allowed={
     "app/src/main/java/net/kuafuai/andee/BodyCoreService.kt",
     "app/src/androidTest/java/net/kuafuai/andee/acceptance/AndroidBackNavigationTest.kt",
     ".github/workflows/build.yml",
+    ".github/workflows/dco.yml",
     "docs/PHASE10B4_ANDROID_BACK.md",
     # Phase 10B.5: Back overlay priority + fail-closed Groq/quota diagnostics.
     "tools/check_phase10b5.py",
