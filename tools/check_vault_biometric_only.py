@@ -25,6 +25,7 @@ allowed = {
     "app/src/main/java/net/kuafuai/andee/ui/VaultUi.kt",
     "app/src/main/java/net/kuafuai/andee/net/CommandDispatcher.kt",
     ".github/workflows/build.yml",
+    ".github/workflows/dco.yml",
     "tools/verify_feature_preservation.py",
     "tools/check_vault_biometric_only.py",
     "docs/PHASE9_VAULT_BIOMETRIC_ONLY.md",
