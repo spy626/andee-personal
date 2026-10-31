@@ -26,6 +26,7 @@ allowed = {
     "tools/check_vault_biometric_only.py",
     "tools/verify_feature_preservation.py",
     ".github/workflows/build.yml",
+    ".github/workflows/dco.yml",
     "docs/PHASE9_2_SETTINGS_CRASH_FIX.md",
     # Phase 10A: clean Settings navigation only; no ordinary AI/voice runtime edits.
     "app/src/androidTest/java/net/kuafuai/andee/acceptance/SettingsNavigationTest.kt",
