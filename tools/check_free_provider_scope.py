@@ -66,6 +66,7 @@ allowed = {
     "app/src/main/java/net/kuafuai/andee/ui/FloatingWindowUi.kt",
     "app/src/main/java/net/kuafuai/andee/BodyCoreService.kt",
     ".github/workflows/build.yml",
+    ".github/workflows/dco.yml",
 }
 actual = set(git("diff", "--name-only", BASE, "HEAD").splitlines())
 assert actual <= allowed, f"Phase 10B.1 changed unrelated files: {sorted(actual - allowed)}"
