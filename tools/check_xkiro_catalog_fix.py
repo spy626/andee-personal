@@ -28,6 +28,7 @@ allow = {
     "tools/check_settings_navigation.py",
     "tools/verify_feature_preservation.py",
     ".github/workflows/build.yml",
+    ".github/workflows/dco.yml",
     "docs/PHASE10B2_XKIRO_CATALOG_FIX.md",
     # Phase 10B.3: xKiro free-only Auto routing and migration.
     "tools/check_xkiro_auto_scope.py",
