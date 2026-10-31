@@ -32,6 +32,7 @@ allowed = {
     "tools/check_vault_settings_safe.py",
     "tools/verify_feature_preservation.py",
     ".github/workflows/build.yml",
+    ".github/workflows/dco.yml",
     "docs/PHASE10B3_XKIRO_AUTO_FREE.md",
     # Phase 10B.4: system Back on visible full card; exact-scope checker active.
     "app/src/androidTest/java/net/kuafuai/andee/acceptance/AndroidBackNavigationTest.kt",
