@@ -29,6 +29,7 @@ allowed = {
     "tools/check_vault_settings_safe.py",
     "tools/verify_feature_preservation.py",
     ".github/workflows/build.yml",
+    ".github/workflows/dco.yml",
     "docs/PHASE10A_SETTINGS_NAVIGATION.md",
     # Phase 10B.1: explicit free provider/zero-cost guard and encrypted keys only.
     "app/src/main/java/net/kuafuai/andee/config/VoiceConfig.kt",
