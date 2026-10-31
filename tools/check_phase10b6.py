@@ -47,6 +47,7 @@ allowed = {
     "app/src/main/java/net/kuafuai/andee/ui/SettingsUi.kt",
     "docs/PHASE10B6_GROQ_LYRA_CHAT.md",
     ".github/workflows/build.yml",
+    ".github/workflows/dco.yml",
 }
 changed = set(git("diff", "--name-only", BASE, "HEAD").splitlines())
 assert changed <= allowed, f"Unexpected Phase 10B.6 files: {sorted(changed - allowed)}"
