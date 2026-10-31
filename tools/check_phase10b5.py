@@ -41,6 +41,7 @@ paths={
     "docs/PHASE10B6_GROQ_LYRA_CHAT.md",
     "docs/PHASE10B5_BACK_GROQ_QUOTA.md",
     ".github/workflows/build.yml",
+    ".github/workflows/dco.yml",
     "tools/verify_feature_preservation.py",
     "tools/check_vault_biometric_only.py",
     "tools/check_vault_screen_lock.py",
