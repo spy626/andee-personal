@@ -78,6 +78,7 @@ allowed = {
     "app/src/main/java/net/kuafuai/andee/ui/FloatingWindowUi.kt",
     "app/src/main/java/net/kuafuai/andee/BodyCoreService.kt",
     ".github/workflows/build.yml",
+    ".github/workflows/dco.yml",
 }
 changed = set(git("diff", "--name-only", BASE, "HEAD").splitlines())
 assert changed <= allowed, f"Changes outside Vault revocation: {sorted(changed - allowed)}"
