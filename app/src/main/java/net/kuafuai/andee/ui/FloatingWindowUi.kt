@@ -8,10 +8,12 @@ import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.graphics.drawable.ColorDrawable
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
@@ -109,6 +111,15 @@ import kotlin.random.Random
  * booted shows the card rather than a corner ball. See
  * `BodyCoreService.onServiceConnected`.
  */
+/** Kept pure so device tests can prove a folded/pass-through ball never steals Back. */
+internal object FullscreenBackPolicy {
+    fun claimsBack(
+        compact: Boolean, typingActivityOpen: Boolean, typingTop: Int,
+        gesturePassthrough: Boolean, captureHidden: Boolean, away: Boolean,
+    ): Boolean = !compact && !typingActivityOpen && typingTop == 0 &&
+        !gesturePassthrough && !captureHidden && !away
+}
+
 class FloatingWindowUi(
     private val context: Context,
     private val listeners: Listeners,
@@ -172,6 +183,12 @@ class FloatingWindowUi(
          * the host folds the card and sends it through SelfCheckActivity.
          */
         fun onOpenCommunityLink(url: String) {}
+
+        /** The WeChat glyph beside them: Andee's QR code ([WeChatQrUi]). */
+        fun onWeChatClick() {}
+
+        /** 打开 › on a timeline row: the wiki article it names. */
+        fun onWikiOpen(id: String) {}
 
         /** The 小本本 key — what it remembers. See [NotebookUi]. */
         fun onNotebookClick() {}
@@ -294,6 +311,78 @@ class FloatingWindowUi(
 
     private var root: BallHostFrame? = null
     private var params: WindowManager.LayoutParams? = null
+
+    /**
+     * The fullscreen overlay used to be FLAG_NOT_FOCUSABLE at all times,
+     * so Android Back went to the app UNDER it, while X in Andee still
+     * worked. Only a full, visible, touchable chat claims Back focus.
+     *
+     * A real TextInputActivity must own Back (including keyboard first).
+     * The folded mascot, screen automation, capture and temporary gestures
+     * never intercept the host app's Back navigation.
+     */
+    private var backPassthroughForTyping = false
+
+    @androidx.annotation.RequiresApi(33)
+    private var backDispatcher: android.window.OnBackInvokedDispatcher? = null
+    @androidx.annotation.RequiresApi(33)
+    private var backCallback: android.window.OnBackInvokedCallback? = null
+
+    private fun shouldHandleBack(): Boolean =
+        FullscreenBackPolicy.claimsBack(
+            compact, backPassthroughForTyping, typingTop,
+            gesturePassthrough, captureHidden, away,
+        )
+
+    private fun minimizeOnAndroidBack() {
+        if (shouldHandleBack()) listeners.onMinimizeClick()
+    }
+
+    /** Safe API 33+ callback, owned by our attached overlay ViewRoot. */
+    private fun syncAndroidBackRegistration() {
+        if (Build.VERSION.SDK_INT < 33) return
+        syncApi33BackRegistration()
+    }
+
+    @androidx.annotation.RequiresApi(33)
+    private fun syncApi33BackRegistration() {
+        val v = root
+        val shouldRegister = v != null && v.isAttachedToWindow && shouldHandleBack()
+        if (!shouldRegister) {
+            unregisterApi33Back()
+            return
+        }
+        val dispatcher = v!!.findOnBackInvokedDispatcher() ?: return
+        if (backDispatcher === dispatcher && backCallback != null) return
+        unregisterApi33Back()
+        val callback = android.window.OnBackInvokedCallback { minimizeOnAndroidBack() }
+        dispatcher.registerOnBackInvokedCallback(
+            android.window.OnBackInvokedDispatcher.PRIORITY_OVERLAY, callback,
+        )
+        backDispatcher = dispatcher
+        backCallback = callback
+    }
+
+    @androidx.annotation.RequiresApi(33)
+    private fun unregisterApi33Back() {
+        val callback = backCallback
+        if (callback != null) {
+            runCatching { backDispatcher?.unregisterOnBackInvokedCallback(callback) }
+        }
+        backCallback = null
+        backDispatcher = null
+    }
+
+    /** Explicitly hand keyboard Back to the typing Activity before it starts. */
+    fun setTypingBackPassthrough(enabled: Boolean) {
+        // Same UI thread as show(), compact transitions and window flags.
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            backPassthroughForTyping = enabled
+            applyWindow()
+        } else {
+            ui.post { backPassthroughForTyping = enabled; applyWindow() }
+        }
+    }
     private var ball: EmotionBallTextureView? = null
     private var topBarView: View? = null
     private var historyView: HistoryListView? = null
@@ -317,6 +406,14 @@ class FloatingWindowUi(
     private var muteKey: View? = null
     private var inputPill: View? = null
     private var muteLabel: TextView? = null
+
+    /** 全部 / 只看对话 beside the ball; shown and hidden with the 朗读 key. */
+    private var eventsKey: TextView? = null
+
+    private fun paintEventsKey() {
+        val on = historyView?.showEvents ?: net.kuafuai.andee.config.VoiceConfig.timelineEvents(context)
+        eventsKey?.text = AppLocale.str(context, if (on) R.string.tl_show_all else R.string.tl_show_talk)
+    }
     private var mutedNow = false
 
     /** Reflect the 朗读 / 静音 setting on the speaker key. Any thread. */
@@ -336,7 +433,10 @@ class FloatingWindowUi(
      * sits after; the tap hands the URL out through
      * [Listeners.onOpenCommunityLink], which is the host's trip to make.
      */
-    private fun communityLink(res: Int, url: String, label: String): View {
+    private fun communityLink(res: Int, url: String, label: String): View =
+        communityGlyph(res, label) { listeners.onOpenCommunityLink(url) }
+
+    private fun communityGlyph(res: Int, label: String, onClick: () -> Unit): View {
         val icon = ImageView(context).apply {
             setImageResource(res)
             setColorFilter(Color.parseColor(Glass.PHOTO_INK))
@@ -348,7 +448,7 @@ class FloatingWindowUi(
             setPadding(dp(7), dp(4), dp(7), dp(4))
             isClickable = true
             Glass.pressable(this)
-            setOnClickListener { listeners.onOpenCommunityLink(url) }
+            setOnClickListener { onClick() }
             addView(icon, LinearLayout.LayoutParams(dp(16), dp(16)))
         }
     }
@@ -546,6 +646,18 @@ class FloatingWindowUi(
         // look from [BallLooks.ALL] safe.
         BallLooks.requestByName(VoiceConfig.ballLook(context))
         val v = build()
+        // Hardware Back on Android 11/12, plus fallback for OEM gesture ROMs.
+        // The focus flag is changed only while fullscreen (see applyWindow).
+        v.isFocusableInTouchMode = true
+        v.setOnKeyListener { _, keyCode, event ->
+            if (keyCode != KeyEvent.KEYCODE_BACK || !shouldHandleBack()) false
+            else {
+                if (event.action == KeyEvent.ACTION_UP && !event.isCanceled) {
+                    minimizeOnAndroidBack()
+                }
+                true
+            }
+        }
         val dm = context.resources.displayMetrics
         val side = dp(COMPACT_DP)
         val p = WindowManager.LayoutParams(
@@ -610,6 +722,7 @@ class FloatingWindowUi(
             wm.addView(v, p)
             root = v
             params = p
+            v.post { syncAndroidBackRegistration() }
             syncCover()
             applyCompactAppearance()
             // Only now can [winYOrigin] be measured, and the resting position
@@ -935,6 +1048,8 @@ class FloatingWindowUi(
     fun hide(): Boolean {
         val v = root ?: return true
         return try {
+            if (Build.VERSION.SDK_INT >= 33) unregisterApi33Back()
+            backPassthroughForTyping = false
             ui.removeCallbacks(strollRunnable)
             slide?.cancel()
             parkedFrom = null
@@ -1061,6 +1176,7 @@ class FloatingWindowUi(
             tipsText?.text = AppLocale.str(context, R.string.window_tips)
             inputHint?.text = AppLocale.str(context, R.string.window_input_hint)
             paintMute()
+            paintEventsKey()
             historyView?.onLocaleChanged()
             renderSceneChip()
         }
@@ -1923,6 +2039,7 @@ class FloatingWindowUi(
         topBarView?.visibility = View.GONE
         sceneChip?.visibility = View.GONE
         muteKey?.visibility = View.GONE
+        eventsKey?.visibility = View.GONE
         // Not just invisible — GONE, so the ball area has the whole window to
         // itself. A scrollback left in the layout would cover most of a 168dp
         // square and there would be nothing left to see the ball in.
@@ -2005,9 +2122,23 @@ class FloatingWindowUi(
         val cy = ballH / 2f + ty + d * 0.707f
         val left = (cx - kw / 2f).toInt()
         val top = (cy - kh / 2f).toInt()
-        if (lp.leftMargin == left && lp.topMargin == top) return
-        lp.leftMargin = minOf(left, w - kw - dp(8)); lp.topMargin = top
-        key.layoutParams = lp
+        if (!(lp.leftMargin == left && lp.topMargin == top)) {
+            lp.leftMargin = minOf(left, w - kw - dp(8)); lp.topMargin = top
+            key.layoutParams = lp
+        }
+        // 全部 / 只看对话: the same spot mirrored to the lower left, and visible whenever 朗读 is.
+        val ev = eventsKey ?: return
+        ev.visibility = key.visibility
+        val elp = ev.layoutParams as? FrameLayout.LayoutParams ?: return
+        if (ev.width == 0) ev.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
+        val ew = if (ev.width > 0) ev.width else ev.measuredWidth
+        val eh = if (ev.height > 0) ev.height else ev.measuredHeight
+        val ecx = w / 2f - d * 0.707f - dp(16)
+        val eleft = maxOf((ecx - ew / 2f).toInt(), dp(8))
+        val etop = (cy - eh / 2f).toInt()
+        if (elp.leftMargin == eleft && elp.topMargin == etop) return
+        elp.leftMargin = eleft; elp.topMargin = etop
+        ev.layoutParams = elp
     }
 
     /**
@@ -2219,6 +2350,7 @@ class FloatingWindowUi(
         topBarView?.visibility = View.VISIBLE
         sceneChip?.visibility = if (sceneTitle != null) View.VISIBLE else View.GONE
         muteKey?.visibility = View.VISIBLE
+        eventsKey?.visibility = View.VISIBLE
         historyView?.visibility = View.VISIBLE
         tipsView?.visibility = View.VISIBLE
         backdrop?.visibility = View.VISIBLE
@@ -2256,20 +2388,16 @@ class FloatingWindowUi(
         // status bar sitting on a band of the user's wallpaper. Measured, not
         // assumed: with the flag the window's top is the display's top and
         // [winYOrigin] measures 0 by itself.
-        val base = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+        val base = WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-        // Untouchable while a typing field is up, even though the window no
-        // longer overlaps it: the field's top edge is *derived* from the
-        // keyboard's height, which changes as the IME animates and as 搜狗's
-        // toolbar row comes and goes. Being a few pixels late would put this
-        // window over the top row of the field and eat the taps aimed at it —
-        // and the card has nothing to offer during a typing session anyway.
-        p.flags = if (gesturePassthrough || typingTop > 0) {
-            base or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-        } else {
-            base
-        }
+        // Fullscreen chat is the only shape that takes Android Back focus.
+        // Folded mascot and all interactions with the real app remain passive.
+        // In particular, never steal the keyboard's Back while the real
+        // TextInputActivity is opening or typing.
+        p.flags = base or
+            (if (shouldHandleBack()) 0 else WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE) or
+            (if (gesturePassthrough || typingTop > 0)
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE else 0)
         // Blur behind only while the card is actually a card. Folded, the
         // window is a 168 dp square around the ball and blurring behind *that*
         // is a smudge following the ball around; hidden for a capture, the
@@ -2292,6 +2420,17 @@ class FloatingWindowUi(
         // controls the user cannot do without.
         insetTopBar()
         runCatching { wm.updateViewLayout(v, p) }
+        // The attached focusable overlay receives gesture-Back (API 33+) or
+        // KEYCODE_BACK (older/OEM devices); on compact/typing, unregister.
+        syncAndroidBackRegistration()
+        if (shouldHandleBack()) {
+            v.post {
+                if (root === v && shouldHandleBack()) {
+                    v.requestFocus()
+                    syncAndroidBackRegistration()
+                }
+            }
+        }
     }
 
     /**
@@ -2486,6 +2625,8 @@ class FloatingWindowUi(
             }
             onTopicContinue = { listeners.onTopicContinue(it) }
             onTopicTranscript = { listeners.onTopicTranscript(it) }
+            onWikiOpen = { listeners.onWikiOpen(it) }
+            showEvents = net.kuafuai.andee.config.VoiceConfig.timelineEvents(context)
         }
         historyView = history
         root.addView(
@@ -2532,6 +2673,8 @@ class FloatingWindowUi(
         communityRow.addView(tipsLine)
         communityRow.addView(communityLink(R.drawable.ic_github, GITHUB_URL, "GitHub"))
         communityRow.addView(communityLink(R.drawable.ic_discord, DISCORD_URL, "Discord"))
+        // WeChat is not a link: it opens Andee's QR code, to add it as a friend.
+        communityRow.addView(communityGlyph(R.drawable.ic_wechat, "WeChat") { listeners.onWeChatClick() })
         // The input pill, always there on the full card like the Mac's composer. It is not a field: an overlay
         // cannot raise the keyboard on this ROM, so a tap opens the real one ([TextInputActivity]) in its place.
         val inputRow = LinearLayout(context).apply {
@@ -2592,6 +2735,25 @@ class FloatingWindowUi(
         mute.contentDescription = "朗读"
         paintMute()
         root.addView(mute, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START))
+
+        // ---- 全部 / 只看对话, at the ball's lower left: the mirror of 朗读, and about the list below it ----
+        val events = TextView(context).apply {
+            textSize = Glass.Type.CAPTION
+            setTextColor(Color.parseColor(Glass.PHOTO_INK))
+            setPadding(dp(8), dp(6), dp(8), dp(6))
+            isClickable = true
+            Glass.pressable(this)
+            visibility = View.GONE
+            setOnClickListener {
+                val h = historyView ?: return@setOnClickListener
+                h.showEvents = !h.showEvents
+                net.kuafuai.andee.config.VoiceConfig.setTimelineEvents(context, h.showEvents)
+                paintEventsKey()
+            }
+        }
+        eventsKey = events
+        paintEventsKey()
+        root.addView(events, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START))
 
         // ---- Top-right controls ----
         //

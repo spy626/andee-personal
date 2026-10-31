@@ -21,6 +21,9 @@ import net.kuafuai.andee.R
 import net.kuafuai.andee.config.FactoryReset
 import net.kuafuai.andee.config.Notebook
 import net.kuafuai.andee.config.Vault
+import net.kuafuai.andee.config.VaultBioGate
+import net.kuafuai.andee.config.ProviderKeyStore
+import net.kuafuai.andee.brain.FreeProviderGuard
 import net.kuafuai.andee.config.VoiceConfig
 import net.kuafuai.andee.i18n.AppLocale
 import net.kuafuai.andee.wake.WakeTemplates
@@ -127,11 +130,6 @@ class SettingsUi(
      * the page it just opened.
      */
     private val onOpenLink: (String) -> Unit = {},
-    /**
-     * The user typed a line to it from 它的打算 («今天别提喝水了»). Wired to the service's own user-turn path;
-     * null hides the box, because a box that sends nowhere is worse than none.
-     */
-    private val onTellBrain: ((String) -> Unit)? = null,
 ) {
 
     private val wm: WindowManager =
@@ -174,6 +172,39 @@ class SettingsUi(
     /** Survives a [rebuild], so switching language doesn't re-hide the group. */
     private var advancedOpen = false
 
+    /** Phase 10A is navigation only: every existing control keeps its original owner. */
+    private enum class Page { HOME, AI_VOICE, APPEARANCE, MEMORY, DEVICE, ADVANCED }
+    private var page = Page.HOME
+    private var resetScrollForPage = false
+
+    /** Form views are rebuilt between pages; keep unsaved values until Save/Cancel. */
+    private val stagedFields = mutableMapOf<String, String>()
+    private val stagedPicks = mutableMapOf<String, String>()
+
+    private fun pageTitle(selected: Page): String = when (selected) {
+        Page.HOME -> lctx.getString(R.string.settings_title)
+        Page.AI_VOICE -> lctx.getString(R.string.settings_nav_ai_voice)
+        Page.APPEARANCE -> lctx.getString(R.string.settings_nav_appearance)
+        Page.MEMORY -> lctx.getString(R.string.settings_nav_memory)
+        Page.DEVICE -> lctx.getString(R.string.settings_nav_device)
+        Page.ADVANCED -> lctx.getString(R.string.settings_nav_advanced)
+    }
+
+    private fun navigateTo(next: Page) {
+        if (page == next) return
+        page = next
+        resetScrollForPage = true
+        rebuild()
+    }
+
+    private fun stageVisibleEdits() {
+        for ((key, view) in fields) stagedFields[key] = view.text?.toString().orEmpty()
+        for ((key, read) in picks) stagedPicks[key] = read()
+        // Newly built controls read this map. No stored preferences are changed
+        // unless the owner explicitly presses the existing Save button.
+        saved = saved + stagedFields + stagedPicks
+    }
+
     /**
      * The 诊断 section is showing the factory-reset warning instead of its
      * three buttons. Survives a [rebuild] so a language switch mid-confirmation
@@ -208,7 +239,14 @@ class SettingsUi(
         closing = null
         if (root != null) return
 
-        saved = VoiceConfig.current(context)
+        saved = VoiceConfig.current(context) + mapOf(
+            "free_key_${ProviderKeyStore.GEMINI_LIVE}" to runCatching {
+                ProviderKeyStore.get(context, ProviderKeyStore.GEMINI_LIVE)
+            }.getOrDefault(""),
+        )
+        stagedFields.clear()
+        stagedPicks.clear()
+        page = Page.HOME
         english = saved["lang"] == VoiceConfig.LANG_EN
         val p = WindowManager.LayoutParams(
             cardWidth(), cardHeight(),
@@ -259,7 +297,9 @@ class SettingsUi(
      */
     private fun rebuild() {
         val old = root ?: return
-        saved = saved + currentEdits()
+        stageVisibleEdits()
+        val changingPage = resetScrollForPage
+        resetScrollForPage = false
         // null means "the bottom", resolved once the new form has a height.
         // Not Int.MAX_VALUE: ScrollView.clamp() evaluates `viewport + y`, which
         // overflows to negative, skips the clamp and scrolls the form clean off
@@ -269,7 +309,9 @@ class SettingsUi(
             // list alone is five lines — so holding the old offset leaves its
             // 确认 row below the fold. 诊断 is the last section and the danger
             // zone is the last thing in it, so the bottom *is* the confirm.
-            if (clearChatConfirm || clearNotesConfirm || factoryConfirm) null else (scroll?.scrollY ?: 0)
+            if (changingPage) 0
+            else if (clearChatConfirm || clearNotesConfirm || factoryConfirm) null
+            else (scroll?.scrollY ?: 0)
         Glass.fadeOut(old) {
             if (root !== old) return@fadeOut
             fields.clear()
@@ -325,6 +367,9 @@ class SettingsUi(
         fields.clear()
         picks.clear()
         scroll = null
+        stagedFields.clear()
+        stagedPicks.clear()
+        page = Page.HOME
         Glass.exit(v) {
             if (closing === v) {
                 runCatching { wm.removeView(v) }
@@ -365,43 +410,103 @@ class SettingsUi(
             setPadding(dp(24), dp(4), dp(24), dp(24))
         }
 
-        // Split in two, and the split is the whole of item 5 of the review: the
-        // card used to be eleven sections in one flat column, in which the
-        // question "what can I actually set here" took a full scroll to answer
-        // because the answer was interleaved with endpoints and a factory-reset
-        // button. 常用 is what a person opens settings for; 高级 is everything
-        // that answers a question they have not asked yet.
-        //
-        // Order inside 常用 is by how early the errand comes up, not
-        // alphabetically: who does the thinking, then how it hears you, then
-        // what it is allowed to keep, then what it may interrupt you for, then
-        // the credentials it can spend. 大脑 stays first because it is the one
-        // setting that changes what the rest of the card means.
-        brainSection(form)
-        // 外观 is the only appearance setting left up here: 形象与表情 moved into 高级,
-        // so the "these two are the same kind of setting" argument went with it. What is
-        // left in 常用 is what a person opens settings to change.
-        // The same order as the Mac's settings page. 形象与表情, 装备 and 保险箱 are opened from here on both bodies;
-        // 小本本 and 朋友 have their own keys on the top bar (and the Mac's sidebar), so this card only holds
-        // the notebook's review settings and no door to the friends list.
-        themeSection(form)
-        expressionsSection(form)
-        wakeSection(form)
-        notebookSection(form)
-        gearSection(form)
-        notifySection(form)
-        nudgeSection(form)
-        planSection(form)
-        vaultSection(form)
-        maxStepsSection(form)
-
-        advancedSection(form)
+        // Existing original controls are only *rearranged*, never rewritten.
+        // Brain and legacy voice remain together until Gemini Live has its own
+        // separately tested provider integration (Phase 10C).
+        when (page) {
+            Page.HOME -> settingsHome(form)
+            Page.AI_VOICE -> brainSection(form)
+            Page.APPEARANCE -> {
+                themeSection(form)
+                expressionsSection(form)
+                wakeSection(form)
+            }
+            Page.MEMORY -> {
+                notebookSection(form)
+                notifySection(form)
+                nudgeSection(form)
+                driveSection(form)
+                maxStepsSection(form)
+            }
+            Page.DEVICE -> {
+                vaultSection(form)
+                gearSection(form)
+            }
+            Page.ADVANCED -> {
+                showHubSection(form)
+                typingSection(form)
+                diagnosticsSection(form)
+            }
+        }
 
         sv.addView(form, matchWrap())
         card.addView(sv, LinearLayout.LayoutParams(MATCH, 0, 1f))
 
         card.addView(footerBar(), matchWrap())
         return card
+    }
+
+    /** The main page has only short routes; existing pages retain all controls. */
+    private fun settingsHome(form: LinearLayout) {
+        navigationRow(
+            form, Page.AI_VOICE, R.string.settings_nav_ai_voice,
+            R.string.settings_nav_ai_voice_note,
+        )
+        navigationRow(
+            form, Page.APPEARANCE, R.string.settings_nav_appearance,
+            R.string.settings_nav_appearance_note,
+        )
+        navigationRow(
+            form, Page.MEMORY, R.string.settings_nav_memory,
+            R.string.settings_nav_memory_note,
+        )
+        navigationRow(
+            form, Page.DEVICE, R.string.settings_nav_device,
+            R.string.settings_nav_device_note,
+        )
+        navigationRow(
+            form, Page.ADVANCED, R.string.settings_nav_advanced,
+            R.string.settings_nav_advanced_note,
+        )
+    }
+
+    private fun navigationRow(
+        form: LinearLayout,
+        destination: Page,
+        @StringRes titleRes: Int,
+        @StringRes noteRes: Int,
+    ) {
+        val row = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = Glass.panel(context, dp(20))
+            setPadding(dp(18), dp(14), dp(14), dp(14))
+            isClickable = true
+            isFocusable = true
+            contentDescription = lctx.getString(titleRes)
+            Glass.pressable(this)
+            setOnClickListener { navigateTo(destination) }
+        }
+        val labels = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        labels.addView(TextView(context).apply {
+            text = lctx.getString(titleRes)
+            textSize = Glass.Type.BODY
+            setTextColor(Color.parseColor(Glass.TITLE))
+        }, matchWrap())
+        labels.addView(TextView(context).apply {
+            text = lctx.getString(noteRes)
+            textSize = Glass.Type.CAPTION
+            setTextColor(Color.parseColor(Glass.SECONDARY))
+            setPadding(0, dp(4), 0, 0)
+        }, matchWrap())
+        row.addView(labels, LinearLayout.LayoutParams(0, WRAP, 1f))
+        row.addView(TextView(context).apply {
+            text = "›"
+            textSize = Glass.Type.TITLE
+            setTextColor(Color.parseColor(Glass.SECONDARY))
+            gravity = Gravity.CENTER
+        }, LinearLayout.LayoutParams(dp(24), dp(36)))
+        form.addView(row, rowParams(dp(12)))
     }
 
     /**
@@ -492,8 +597,21 @@ class SettingsUi(
             setPadding(dp(28), dp(22), dp(18), dp(14))
         }
         val titles = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        if (page != Page.HOME) {
+            row.addView(TextView(context).apply {
+                text = "‹"
+                contentDescription = lctx.getString(R.string.settings_nav_back)
+                textSize = Glass.Type.TITLE
+                setTextColor(Color.parseColor(Glass.TITLE))
+                gravity = Gravity.CENTER
+                isClickable = true
+                isFocusable = true
+                Glass.pressable(this)
+                setOnClickListener { navigateTo(Page.HOME) }
+            }, LinearLayout.LayoutParams(dp(40), dp(44)))
+        }
         titles.addView(TextView(context).apply {
-            text = lctx.getString(R.string.settings_title)
+            text = pageTitle(page)
             // 21 was sized against the old, smaller card. On a card this wide
             // a 21sp title is the first thing that reads as undersized, and it
             // is the one line that has to carry the sheet's identity.
@@ -654,6 +772,15 @@ class SettingsUi(
             lctx.getString(R.string.settings_device_name),
             hint = lctx.getString(R.string.settings_device_name_hint),
         )
+        // Public signing key is manually obtained from the trusted Hub owner;
+        // it is NOT a private key, bearer token, or secret.
+        field(
+            hubBlock,
+            "hub_public_key",
+            "Trusted Hub identity key (P-256 Base64)",
+            hint = "Paste verified Hub public key (SPKI)",
+        )
+        note(hubBlock, "Remote Hub must support signed identity proof before any tools are exposed.")
         note(hubBlock, lctx.getString(R.string.settings_brain_cloud_note))
 
         // ---- CodeFlying tab ----
@@ -683,13 +810,18 @@ class SettingsUi(
 
         // ---- 本机 tab: LLM + 火山 voice rows ----
         val localBlock = block(panel)
+        val legacyLlmBlock = block(localBlock)
+        freeProviderSection(panel, legacyLlmBlock) {
+            // A deliberately chosen free provider uses the original LocalBrain.
+            pickBrain(VoiceConfig.BRAIN_LOCAL)
+        }
         // The hint *is* the value a blank row resolves to, so the hint and the
         // resolved config come from the same language-aware pair — see
         // [VoiceConfig.llmModelDefault]. An English card advertises an OpenAI
         // model / base URL and, if the user never saves one, actually calls it;
         // a Chinese card stays on DeepSeek.
         field(
-            localBlock,
+            legacyLlmBlock,
             "llm_api_key",
             lctx.getString(R.string.settings_llm_api_key),
             hint = "sk-…",
@@ -700,17 +832,17 @@ class SettingsUi(
         // moves the tab under their finger rather than sending them up to
         // find which cell that was — and it only moves the pick; 保存 still
         // commits it, like every other row.
-        linkNote(localBlock, lctx.getString(R.string.settings_no_key_use_codeflying)) {
+        linkNote(legacyLlmBlock, lctx.getString(R.string.settings_no_key_use_codeflying)) {
             pickBrain(VoiceConfig.BRAIN_CODEFLYING)
         }
         field(
-            localBlock,
+            legacyLlmBlock,
             "llm_model",
             lctx.getString(R.string.settings_llm_model),
             hint = VoiceConfig.llmModelDefault(context),
         )
         field(
-            localBlock,
+            legacyLlmBlock,
             "llm_base_url",
             lctx.getString(R.string.settings_llm_base_url),
             hint = VoiceConfig.llmBaseUrlDefault(context),
@@ -737,162 +869,50 @@ class SettingsUi(
         )
         note(localBlock, lctx.getString(R.string.settings_brain_local_note))
 
-        // ---- Which service hears and speaks ----
-        //
-        // One container, so that the whole block can be taken out in one move
-        // rather than view by view — see the visibility flip at the end of it.
-        //
-        // **Not inside `localBlock`**, even though it reads like a 本机
-        // concern: who hears and who thinks are two different questions, and
-        // hanging this off the 本机 tab would hide it from a 云端 device that
-        // legitimately wants to point its own voice service somewhere.
-        //
-        // The two sets of rows are mutually exclusive and are not two flavours
-        // of the same thing: 火山's are endpoints and resource ids, Google's are
-        // a project, a location and two model names.
+        // Voice is Gemini Live only. Keep the encrypted key here; legacy
+        // Huoshan / Vertex voice selectors are intentionally no longer exposed.
         val voiceBlock = block(panel)
-        // 听（识别）：谁把用户的话转成文字。系统引擎没有识别器，所以这一
-        // 侧只有 火山/谷歌。
-        rowLabel(voiceBlock, lctx.getString(R.string.settings_voice_hear_provider))
-        var applyProvider: ((String, Boolean) -> Unit)? = null
-        val provider = segmented(
-            voiceBlock,
-            "voice_provider",
-            listOf(
-                // 火山 first, because the first option is the fallback when
-                // nothing is saved — and for every device that predates this
-                // row, 火山 is what it has been running. See
-                // [VoiceConfig.voiceProvider].
-                VoiceConfig.VOICE_HUOSHAN to lctx.getString(R.string.settings_voice_provider_huoshan),
-                VoiceConfig.VOICE_GOOGLE to lctx.getString(R.string.settings_voice_provider_google),
-            ),
-        ) { applyProvider?.invoke(it, true) }
-
-        // 说（朗读）：谁把答案读出来。可以选系统自带的引擎——免费、离线。
-        rowLabel(voiceBlock, lctx.getString(R.string.settings_voice_speak_provider))
-        var speakPicked = ""
-        val speak = segmented(
-            voiceBlock,
-            "speak_provider",
-            listOf(
-                VoiceConfig.VOICE_HUOSHAN to lctx.getString(R.string.settings_voice_provider_huoshan),
-                VoiceConfig.VOICE_GOOGLE to lctx.getString(R.string.settings_voice_provider_google),
-                VoiceConfig.VOICE_SYSTEM to lctx.getString(R.string.settings_voice_provider_system),
-            ),
-        ) {
-            speakPicked = it
-            applyProvider?.invoke(provider, true)
-        }
-        speakPicked = speak
-
-        // 火山: previously in 高级 → 火山. Rows copy that section's labels,
-        // which still describe exactly these keys.
-        val huoshanBlock = block(voiceBlock)
+        val geminiLiveBlock = block(voiceBlock)
+        // Gemini Live has its own key; do not mix it with any text-model key.
         field(
-            huoshanBlock,
-            "api_key",
-            lctx.getString(R.string.settings_voice_api_key),
-            hint = lctx.getString(R.string.settings_voice_api_key_hint),
+            geminiLiveBlock,
+            "free_key_${ProviderKeyStore.GEMINI_LIVE}",
+            lctx.getString(R.string.settings_gemini_live_api_key),
+            hint = lctx.getString(R.string.settings_gemini_live_api_key_hint),
             secret = true,
         )
-        // Same line, same reason, under the voice key: this is the other half
-        // of what CodeFlying would hand over for free.
-        linkNote(huoshanBlock, lctx.getString(R.string.settings_no_key_use_codeflying)) {
-            pickBrain(VoiceConfig.BRAIN_CODEFLYING)
-        }
-        field(huoshanBlock, "asr_endpoint", lctx.getString(R.string.settings_voice_asr_endpoint))
-        field(huoshanBlock, "asr_resource_id", lctx.getString(R.string.settings_voice_asr_resource_id))
-        field(huoshanBlock, "tts_endpoint", lctx.getString(R.string.settings_voice_tts_endpoint))
-        field(huoshanBlock, "tts_resource_id", lctx.getString(R.string.settings_voice_tts_resource_id))
+        note(geminiLiveBlock, lctx.getString(R.string.settings_gemini_live_key_note))
+        rowLabel(geminiLiveBlock, "Live model")
         field(
-            huoshanBlock,
-            "tts_sample_rate",
-            lctx.getString(R.string.settings_voice_tts_sample_rate),
-            numeric = true,
+            geminiLiveBlock,
+            "gemini_live_model",
+            "Gemini Live model ID",
+            hint = net.kuafuai.andee.audio.GeminiLiveSession.DEFAULT_MODEL,
+        )
+        rowLabel(geminiLiveBlock, "Voice")
+        segmented(
+            geminiLiveBlock,
+            "gemini_live_voice",
+            listOf(
+                "Aoede" to "Aoede", "Charon" to "Charon", "Kore" to "Kore",
+                "Fenrir" to "Fenrir", "Puck" to "Puck", "Leda" to "Leda",
+                "Orus" to "Orus", "Zephyr" to "Zephyr",
+            ),
+        )
+        rowLabel(geminiLiveBlock, "Personality")
+        segmented(
+            geminiLiveBlock,
+            "gemini_live_personality",
+            listOf(
+                "friend" to "Friend",
+                "professional" to "Professional",
+                "assistant" to "Assistant",
+            ),
         )
 
-        // ---- Google: one Vertex Express key, two protocols ----
-        //
-        // Every hint here is the value a blank row resolves to, from the same
-        // constants [VoiceConfig.load] reads — the same rule the LLM rows
-        // follow, for the same reason: a card that advertises a model but
-        // silently calls another is lying where the user goes to decide.
-        // A blank row means "use whatever the build carries", which for a
-        // packaged-for-Google APK is a real key and a real project number. So
-        // the hint has to say that, or the user reads an empty box as "not set
-        // up" while the device is happily talking to Google with a credential
-        // they never typed. The key's *value* is never shown — a settings card
-        // is not a place to print a secret — but the project number is not one,
-        // and printing it is how the row can be checked at a glance.
-        val builtInKey = VoiceConfig.googleApiKeyDefault()
-        val builtInProject = VoiceConfig.googleProjectDefault()
+        // Legacy provider selectors were removed from the voice UI; Gemini Live is the sole voice provider.
 
-        val googleBlock = block(voiceBlock)
-        field(
-            googleBlock,
-            "google_api_key",
-            lctx.getString(R.string.settings_google_api_key),
-            hint = if (builtInKey.isNotEmpty()) {
-                lctx.getString(R.string.settings_google_key_builtin)
-            } else {
-                lctx.getString(R.string.settings_google_api_key_hint)
-            },
-            secret = true,
-        )
-        linkNote(googleBlock, lctx.getString(R.string.settings_no_key_use_codeflying)) {
-            pickBrain(VoiceConfig.BRAIN_CODEFLYING)
-        }
-        field(
-            googleBlock,
-            "google_project",
-            lctx.getString(R.string.settings_google_project),
-            hint = builtInProject.ifEmpty {
-                lctx.getString(R.string.settings_google_project_hint)
-            },
-        )
-        field(
-            googleBlock,
-            "google_location",
-            lctx.getString(R.string.settings_google_location),
-            hint = VoiceConfig.googleLocationDefault(),
-        )
-        field(
-            googleBlock,
-            "google_asr_model",
-            lctx.getString(R.string.settings_google_asr_model),
-            hint = VoiceConfig.googleAsrModelDefault(),
-        )
-        field(
-            googleBlock,
-            "google_tts_model",
-            lctx.getString(R.string.settings_google_tts_model),
-            hint = VoiceConfig.googleTtsModelDefault(),
-        )
-        field(
-            googleBlock,
-            "google_base_url",
-            lctx.getString(R.string.settings_google_base_url),
-            hint = VoiceConfig.googleBaseUrlDefault(),
-        )
-        field(
-            googleBlock,
-            "google_language",
-            lctx.getString(R.string.settings_google_language),
-            hint = lctx.getString(R.string.settings_google_language_hint),
-        )
-        note(googleBlock, lctx.getString(R.string.settings_voice_google_note))
 
-        applyProvider = { p, animate ->
-            // A provider's block is shown if it is picked on *either* side. The
-            // blocks hold both the hearing and speaking rows, so hiding one
-            // because the *hearing* picker does not name it would bury the key
-            // field for the provider the *speaking* picker just chose.
-            val useHuoshan = p == VoiceConfig.VOICE_HUOSHAN || speakPicked == VoiceConfig.VOICE_HUOSHAN
-            val useGoogle = p == VoiceConfig.VOICE_GOOGLE || speakPicked == VoiceConfig.VOICE_GOOGLE
-            Glass.setVisible(huoshanBlock, useHuoshan, animate)
-            Glass.setVisible(googleBlock, useGoogle, animate)
-        }
-        applyProvider(provider, false)
 
         // **The voice block is not drawn at all under the hosted backend**, and
         // not merely disabled. There, [VoiceConfig.voiceProvider] pins 火山 and
@@ -918,16 +938,121 @@ class SettingsUi(
             Glass.setVisible(hubBlock, m == VoiceConfig.BRAIN_HUB, animate)
             Glass.setVisible(cfBlock, m == VoiceConfig.BRAIN_CODEFLYING, animate)
             Glass.setVisible(localBlock, m == VoiceConfig.BRAIN_LOCAL, animate)
-            // Keyed on the tab the user is looking at, not on what the build
-            // can resolve it to: CodeFlying carries its own voice, and a voice
-            // key row under that tab is a row nothing reads.
-            Glass.setVisible(voiceBlock, m != VoiceConfig.BRAIN_CODEFLYING, animate)
+            // Gemini Live is independent of the selected text-model backend.
+            Glass.setVisible(voiceBlock, true, animate)
         }
-        applyMode(mode, false)
         applyThinking = { th, animate ->
             Glass.setVisible(effortBlock, th != "disabled", animate)
         }
         applyThinking(thinking, false)
+    }
+
+    /**
+     * Phase 10B.1: an explicit local-provider choice, not a second agent.
+     * The original legacy model/key/base-url controls are still available and
+     * have their exact old preferences and backend. They are simply hidden
+     * when a free provider was explicitly chosen.
+     *
+     * Credentials are never prefilled: a blank key means "keep the encrypted
+     * key already on this phone", not "delete it".
+     */
+    private fun freeProviderSection(
+        parent: LinearLayout,
+        legacyBlock: LinearLayout,
+        chooseLocalBrain: () -> Unit,
+    ) {
+        val panel = group(
+            parent,
+            lctx.getString(R.string.settings_free_provider_heading),
+            lctx.getString(R.string.settings_free_provider_note),
+        )
+        val choices = listOf(
+            FreeProviderGuard.LEGACY to lctx.getString(R.string.settings_free_legacy),
+            FreeProviderGuard.XKIRO to "xKiro Free",
+            FreeProviderGuard.GROQ to "Groq Free",
+            FreeProviderGuard.OPENROUTER to "OpenRouter Free",
+        )
+        var selected = saved["free_provider"].orEmpty().takeIf { value ->
+            choices.any { it.first == value }
+        } ?: FreeProviderGuard.LEGACY
+        val blocks = mutableMapOf<String, LinearLayout>()
+        val selectors = mutableMapOf<String, TextView>()
+        var updateVisibility: (Boolean) -> Unit = {}
+        for ((id, name) in choices) {
+            val chip = TextView(context).apply {
+                text = name
+                textSize = Glass.Type.BODY
+                setTextColor(Color.parseColor(Glass.TITLE))
+                background = Glass.well(context, dp(12))
+                setPadding(dp(14), dp(12), dp(14), dp(12))
+                isClickable = true
+                isFocusable = true
+                contentDescription = name
+                Glass.pressable(this)
+                setOnClickListener {
+                    selected = id
+                    if (id != FreeProviderGuard.LEGACY) chooseLocalBrain()
+                    updateVisibility(true)
+                }
+            }
+            selectors[id] = chip
+            panel.addView(chip, rowParams(dp(7)))
+        }
+        picks["free_provider"] = { selected }
+
+        for ((id, _) in choices.drop(1)) {
+            val block = block(panel)
+            blocks[id] = block
+            note(block, lctx.getString(R.string.settings_free_key_note))
+            val key = "free_key_$id"
+            val hasStoredKey = runCatching {
+                ProviderKeyStore.get(context, id).isNotBlank()
+            }.getOrDefault(false)
+            field(
+                block, key, lctx.getString(R.string.settings_free_api_key),
+                hint = if (hasStoredKey) lctx.getString(R.string.settings_free_saved_key)
+                    else lctx.getString(R.string.settings_free_new_key),
+                secret = true,
+            )
+            rowLabel(block, lctx.getString(R.string.settings_free_model))
+            val models = FreeProviderGuard.models(id)
+            val names = when (id) {
+                FreeProviderGuard.XKIRO -> listOf("Auto Free", "Qwen Free")
+                FreeProviderGuard.GROQ -> listOf("GPT-OSS 120B", "GPT-OSS 20B")
+                else -> listOf("Auto Free")
+            }
+            segmented(
+                block, "free_model_$id", models.zip(names),
+            )
+            if (id == FreeProviderGuard.XKIRO) {
+                note(block, lctx.getString(R.string.settings_free_xkiro_safety))
+            }
+            if (id == FreeProviderGuard.GROQ) {
+                note(block, lctx.getString(R.string.settings_free_groq_warning))
+                segmented(
+                    block, "free_groq_confirm",
+                    listOf("off" to lctx.getString(R.string.common_off),
+                        "on" to lctx.getString(R.string.common_on)),
+                )
+            }
+            if (id == FreeProviderGuard.OPENROUTER) {
+                note(block, lctx.getString(R.string.settings_free_openrouter_safety))
+            }
+        }
+
+        updateVisibility = { animated ->
+            for ((id, selector) in selectors) {
+                selector.setTextColor(Color.parseColor(
+                    if (id == selected) Glass.ACCENT else Glass.TITLE,
+                ))
+            }
+            Glass.setVisible(legacyBlock, selected == FreeProviderGuard.LEGACY, animated)
+            for ((id, block) in blocks) {
+                Glass.setVisible(block, selected == id, animated)
+            }
+        }
+        updateVisibility(false)
+        note(panel, lctx.getString(R.string.settings_free_scope))
     }
 
     /**
@@ -1069,7 +1194,17 @@ class SettingsUi(
     private fun vaultSection(form: LinearLayout) {
         val panel = group(form, lctx.getString(R.string.settings_section_vault))
         fun summary(): String {
-            val n = Vault.entries(context).size
+            // Phase 9 biometric Vault: Settings is NOT a credential request.
+            // Never read a locked Vault just to show its count. That read
+            // throws and used to crash the entire Settings overlay on open.
+            if (!VaultBioGate.ready(context)) {
+                return lctx.getString(R.string.settings_vault_locked_note)
+            }
+            val n = runCatching { Vault.entries(context).size }.getOrElse {
+                // Key invalidation/corruption must never look like zero saved
+                // credentials. Do not erase data or bypass the biometric gate.
+                return lctx.getString(R.string.settings_vault_unavailable_note)
+            }
             return if (n == 0) {
                 lctx.getString(R.string.settings_vault_empty_note)
             } else {
@@ -1376,6 +1511,16 @@ class SettingsUi(
      * the same decision — how much this thing may interrupt — and 关 is leftmost because it is the fallback
      * for a value nobody recognises (see `VoiceConfig.nudgeLevel`; unset reads as 少).
      */
+    /**
+     * 自己动起来: whether it may look at what is on its mind and get up for it without being asked
+     * ([net.kuafuai.andee.brain.Heartbeat]). 关 leftmost, the fallback for a value nobody recognises; unset reads as 开.
+     */
+    private fun driveSection(form: LinearLayout) {
+        val panel = group(form, lctx.getString(R.string.settings_section_drive))
+        segmented(panel, "drive", listOf("off" to lctx.getString(R.string.common_off), "on" to lctx.getString(R.string.common_on)))
+        note(panel, lctx.getString(R.string.settings_drive_note))
+    }
+
     private fun nudgeSection(form: LinearLayout) {
         val panel = group(form, lctx.getString(R.string.settings_section_nudge))
         segmented(
@@ -1411,105 +1556,6 @@ class SettingsUi(
      * cut — and the alarms follow in the same tap (`Scheduler.syncPlan`). Anything subtler goes through the
      * box at the bottom as an ordinary message, and the model changes the plan itself.
      */
-    private fun planSection(form: LinearLayout) {
-        val panel = group(form, lctx.getString(R.string.settings_section_plan))
-        val box = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-        panel.addView(box, matchWrap())
-        fun fill() {
-            box.removeAllViews()
-            val plans = net.kuafuai.andee.config.Notebook.plans(context)
-            val day = plans.day(plans.today())
-            rowLabel(box, lctx.getString(R.string.settings_plan_today))
-            if (day == null) {
-                note(box, lctx.getString(R.string.settings_plan_none_today))
-            } else {
-                box.addView(noteView(day.intent).apply {
-                    setTextColor(Color.parseColor(Glass.TITLE))
-                    textSize = Glass.Type.BODY
-                }, rowParams(dp(8)))
-                for (it in day.items.sortedBy { i -> i.time.ifEmpty { "99" } }) {
-                    val live = it.status == "planned"
-                    val line = "${it.time.ifEmpty { it.slot }.ifEmpty { "·" }}  ${kindLabel(it.kind)}  ${it.what}"
-                    planRow(box, line, statusLabel(it.status), live) {
-                        if (live) {
-                            plans.dropItemByUser(day.date, it.id)
-                            net.kuafuai.andee.config.Scheduler.syncPlan(context)
-                            fill()
-                        }
-                    }
-                }
-                if (day.quiet.isNotEmpty()) note(box, lctx.getString(R.string.settings_plan_quiet, day.quiet.joinToString("；")))
-            }
-            rowLabel(box, lctx.getString(R.string.settings_plan_directions))
-            val dirs = plans.directions().filter { d -> d.status != "dropped" && d.status != "done" }
-            if (dirs.isEmpty()) note(box, lctx.getString(R.string.settings_plan_none_directions))
-            for (d in dirs) {
-                val paused = d.status == "paused"
-                val row = LinearLayout(context).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    gravity = Gravity.CENTER_VERTICAL
-                }
-                row.addView(noteView(d.title + if (d.howIHelp.isNotEmpty()) " — ${d.howIHelp}" else "").apply {
-                    alpha = if (paused) 0.5f else 1f
-                }, LinearLayout.LayoutParams(0, WRAP, 1f))
-                row.addView(smallLink(lctx.getString(if (paused) R.string.settings_plan_resume else R.string.settings_plan_pause)) {
-                    plans.setDirectionByUser(d.id, if (paused) "active" else "paused")
-                    fill()
-                })
-                row.addView(smallLink(lctx.getString(R.string.settings_plan_remove)) {
-                    plans.setDirectionByUser(d.id, "dropped")
-                    fill()
-                })
-                box.addView(row, rowParams(dp(8)))
-            }
-        }
-        fill()
-        val tell = onTellBrain ?: return
-        rowLabel(panel, lctx.getString(R.string.settings_plan_tell))
-        val row = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        val et = EditText(context).apply {
-            background = Glass.well(context, dp(13))
-            setPadding(dp(14), dp(13), dp(14), dp(13))
-            setTextColor(Color.parseColor(Glass.TITLE))
-            setHintTextColor(Color.parseColor(Glass.MUTED))
-            textSize = Glass.Type.BODY
-            isSingleLine = true
-            inputType = InputType.TYPE_CLASS_TEXT
-            hint = lctx.getString(R.string.settings_plan_tell_hint)
-        }
-        row.addView(et, LinearLayout.LayoutParams(0, WRAP, 1f))
-        val sent = noteView("")
-        row.addView(smallLink(lctx.getString(R.string.settings_plan_send)) {
-            val text = et.text?.toString().orEmpty().trim()
-            if (text.isEmpty()) return@smallLink
-            tell(text)
-            et.setText("")
-            sent.text = lctx.getString(R.string.settings_plan_sent)
-        })
-        panel.addView(row, rowParams(dp(5)))
-        panel.addView(sent, rowParams(dp(6)))
-    }
-
-    /** One plan item: what, its state, and ✕ while it is still to come. */
-    private fun planRow(parent: LinearLayout, text: String, status: String, removable: Boolean, onRemove: () -> Unit) {
-        val row = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        row.addView(noteView(text).apply { alpha = if (removable) 1f else 0.6f }, LinearLayout.LayoutParams(0, WRAP, 1f))
-        row.addView(TextView(context).apply {
-            this.text = status
-            textSize = Glass.Type.CAPTION
-            setTextColor(Color.parseColor(Glass.MUTED))
-            setPadding(dp(10), 0, dp(4), 0)
-        })
-        if (removable) row.addView(smallLink("✕", onRemove))
-        parent.addView(row, rowParams(dp(6)))
-    }
-
     private fun smallLink(label: String, onClick: () -> Unit): TextView = TextView(context).apply {
         text = label
         textSize = Glass.Type.CAPTION
@@ -1519,28 +1565,6 @@ class SettingsUi(
         Glass.pressable(this)
         setOnClickListener { onClick() }
     }
-
-    private fun kindLabel(kind: String): String = lctx.getString(
-        when (kind) {
-            "ask" -> R.string.settings_plan_kind_ask
-            "prepare" -> R.string.settings_plan_kind_prepare
-            "follow_up" -> R.string.settings_plan_kind_follow_up
-            else -> R.string.settings_plan_kind_remind
-        },
-    )
-
-    private fun statusLabel(status: String): String = lctx.getString(
-        when (status) {
-            "done" -> R.string.settings_plan_st_done
-            "declined" -> R.string.settings_plan_st_declined
-            "ignored" -> R.string.settings_plan_st_ignored
-            "missed" -> R.string.settings_plan_st_missed
-            "skipped" -> R.string.settings_plan_st_skipped
-            "moved" -> R.string.settings_plan_st_moved
-            "dropped" -> R.string.settings_plan_st_dropped
-            else -> R.string.settings_plan_st_planned
-        },
-    )
 
     // ---- Widgets ----
 
@@ -2012,31 +2036,44 @@ class SettingsUi(
 
     // ---- Data ----
 
-    /** What is on screen right now, saved or not. Used by [rebuild]. */
-    private fun currentEdits(): Map<String, String> {
-        val out = mutableMapOf<String, String>()
-        for ((k, et) in fields) out[k] = et.text?.toString().orEmpty()
-        for ((k, read) in picks) out[k] = read()
-        return out
-    }
-
+    /** Save all visited pages, including a key edited before navigating away. */
     private fun saveAndHide() {
+        stageVisibleEdits()
         val updates = mutableMapOf<String, String>()
-        for ((k, et) in fields) {
-            val v = et.text?.toString()?.trim().orEmpty()
+        for ((k, raw) in stagedFields) {
+            val v = raw.trim()
             // Overridable keys go in even when blank: blank is how the user
             // says "go back to the compiled default", and VoiceConfig.save()
             // deletes the pref when it sees one. Non-overridable keys only go
             // in when non-empty, so an untouched field doesn't wipe a saved
             // value.
-            if (v.isNotEmpty() || k in VoiceConfig.OVERRIDE_KEYS) {
+            if (k != "free_key_${ProviderKeyStore.GEMINI_LIVE}" &&
+                (v.isNotEmpty() || k in VoiceConfig.OVERRIDE_KEYS)
+            ) {
                 updates[k] = v
             }
         }
         // Pickers go in unconditionally: their value is never blank, which is
         // what lets a setting actually be turned back off — VoiceConfig.save()
         // drops blank values, so a text field never could.
-        for ((k, read) in picks) updates[k] = read()
+        for ((k, value) in stagedPicks) updates[k] = value
+        // Encrypt newly typed keys BEFORE selecting their route. A Keystore
+        // failure must not silently switch Andee to an unusable brain.
+        try {
+            for (id in listOf(
+                FreeProviderGuard.XKIRO, FreeProviderGuard.GROQ,
+                FreeProviderGuard.OPENROUTER, ProviderKeyStore.GEMINI_LIVE,
+            )) {
+                stagedFields["free_key_$id"]?.trim()?.takeIf { it.isNotEmpty() }
+                    ?.let { ProviderKeyStore.put(context, id, it) }
+            }
+        } catch (_: Exception) {
+            android.widget.Toast.makeText(
+                context, lctx.getString(R.string.settings_free_key_save_error),
+                android.widget.Toast.LENGTH_LONG,
+            ).show()
+            return
+        }
         if (updates.isNotEmpty()) VoiceConfig.save(context, updates)
         hide()
     }

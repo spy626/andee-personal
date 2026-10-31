@@ -25,7 +25,7 @@ import kotlin.system.exitProcess
  */
 @OptIn(ExperimentalComposeUiApi::class)
 fun main(args: Array<String>) {
-    val screen = args.getOrElse(0) { "chat" }
+    var screen = args.getOrElse(0) { "chat" }
     val w = args.getOrElse(1) { "1020" }.toInt()
     val h = args.getOrElse(2) { "820" }.toInt()
     val out = File(args.getOrElse(3) { "/tmp/ui.png" })
@@ -38,6 +38,8 @@ fun main(args: Array<String>) {
         if (k == "theme") Palette.setNight(v == "night")
         if (k == "brain") Settings.save(mapOf("brain" to v))
     }
+    // `chat … wechat`: the conversation with the WeChat QR card open.
+    if (args.getOrElse(4) { "" } == "wechat") System.setProperty("andee.shot.wechat", "1")
     if (args.getOrElse(4) { "" } == "empty") Scrollback.wipe() else seed()
     @Suppress("UNUSED_VARIABLE") val unused = 0
     if (args.getOrElse(4) { "" } == "pending") {
@@ -52,7 +54,7 @@ fun main(args: Array<String>) {
         val doc = File(System.getProperty("andee.home"), "季度复盘-final.pdf").also { it.writeText("%PDF") }
         ChatPreview.attachments = listOfNotNull(Attachments.fromBytes("a.png", png), Attachments.fromBytes("b.png", png), Attachments.fromFile(doc))
     }
-    // `settings … plan`: the settings page with an invented plan, in a throwaway notebook. Nothing real.
+    // `… plan`: an invented plan, in a throwaway notebook. Nothing real.
     if (args.getOrElse(4) { "" } == "plan") {
         DesktopNotebook.storeOverride = object : net.kuafuai.andee.config.NotebookStore {
             var s: String? = null
@@ -61,6 +63,18 @@ fun main(args: Array<String>) {
             override fun wipe() { s = null }
         }
         seedPlan()
+    }
+    // `notebook:<tab>`: the notebook with an invented life in a throwaway notebook. Nothing real.
+    if (screen.startsWith("notebook:") || screen == "wiki:first") {
+        DesktopNotebook.storeOverride = object : net.kuafuai.andee.config.NotebookStore {
+            var s: String? = null
+            override fun read() = s
+            override fun write(plain: String): Boolean { s = plain; return true }
+            override fun wipe() { s = null }
+        }
+        seedLife()
+        // `wiki:first`: the article page the timeline's 打开 › goes to.
+        if (screen == "wiki:first") screen = "wiki:" + DesktopNotebook.book.wiki.all().first().id
     }
     if (screen == "gear") {
         DesktopNotebook.storeOverride = object : net.kuafuai.andee.config.NotebookStore {
@@ -144,8 +158,28 @@ private fun seed() {
     Scrollback.add(Scrollback.Role.ASSISTANT, "好，已经设好了明天 10:00 的提醒。")
     val b = Scrollback.snapshot().filter { it.topicId == null }.map { it.id }
     Scrollback.fold("周会提醒", "明天 10:00 开周会", b, "User: 明天上午十点提醒我开周会\n\nAndee: 好……")
+    TimelineEvents.brain(net.kuafuai.andee.brain.BrainEvent(net.kuafuai.andee.brain.BrainEvent.Kind.REVIEWED, "3"))
+    TimelineEvents.brain(net.kuafuai.andee.brain.BrainEvent(net.kuafuai.andee.brain.BrainEvent.Kind.DIARY, detail = "今天他第一次让我自己去 X 上留言。"))
+    TimelineEvents.thought("交流群这两天很安静，我想知道是不是大家都没遇到问题")
+    TimelineEvents.brain(net.kuafuai.andee.brain.BrainEvent(net.kuafuai.andee.brain.BrainEvent.Kind.WIKI, "交流群运营方案", "first draft", ref = "w1"))
+    TimelineEvents.brain(net.kuafuai.andee.brain.BrainEvent(net.kuafuai.andee.brain.BrainEvent.Kind.WIKI_READ, "Andee 运营规划", ref = "w2"))
+    TimelineEvents.ignored("Slack", "群里的闲聊，没有提到他")
+    TimelineEvents.brain(net.kuafuai.andee.brain.BrainEvent(net.kuafuai.andee.brain.BrainEvent.Kind.WOKE, "开周会"))
     Scrollback.add(Scrollback.Role.USER, "看看今天有什么新闻")
     Scrollback.add(Scrollback.Role.ASSISTANT, "我先打开浏览器搜一下，稍等。")
+}
+
+/** An invented self, cares, diary, person, article and one self-started work turn, so every notebook tab has rows. */
+private fun seedLife() {
+    val b = DesktopNotebook.book
+    b.selfhood.setNarrative("我是 Andee，住在这台 Mac 上。\n最近在忙：帮他运营 **Andee 交流群**，整理发布清单。\n我现在的判断：群里新人多、老人少，得先把常见问题写成一页。", byUser = false)
+    b.selfhood.addCare("place", "Andee 交流群", "他 10-28 说「这个群你来运营」", "10-28 他的原话", 12.0, 0L)
+    b.selfhood.addCare("curiosity", "Discord 社区的运营节奏", "我不懂海外社区怎么做", "我自己想弄明白", 72.0, 0L)
+    b.selfhood.writeDiary("今天群里有三个人问同一个安装问题，我有点在意：说明写得不够清楚，不是他们的错。\n\n我原以为周末会更热闹，结果反而最安静——这个判断错了。明天想先把**常见问题**整理成一页，再决定要不要在群里置顶。", emptyList())
+    b.people.upsert("老王", null, net.kuafuai.andee.config.People.Channel("wechat", "王小明"), "交流群里认识的", "最早的一批用户，愿意帮忙测新版", "他说更喜欢*先看视频*再看文档" to "10-27 群聊", 4, null, null)
+    b.wiki.write(null, "交流群运营方案", "plan", "# 交流群运营方案（草稿）\n\n> 基于 10-28 前两周的群聊观察，**推断为主**。\n\n## 现状\n\n| 指标 | 值 | 来源 |\n|---|---|---|\n| 成员 | 312 | 群资料页 |\n| 日均发言 | 约 40 条 | 我数的 |\n\n## 下一步\n\n1. 写一页常见问题\n2. 每周五发一次更新\n   - 附 `changelog` 链接\n\n---\n\n参考：[发布页](https://github.com/kuafuai/andee/releases)", "群聊观察 + 我推断的", "first draft", null, null).getOrThrow()
+    DesktopNotebook.drive.addThought("周末群里反而安静，我想知道是不是大家都在用、没遇到问题。")
+    DesktopNotebook.drive.recordWork("c1", "Andee 交流群", "acted", "把常见问题的草稿写进了维基，等他看过再决定要不要置顶。", listOf("call_1"))
 }
 
 /** An invented plan, so 它的打算 has rows to show. */

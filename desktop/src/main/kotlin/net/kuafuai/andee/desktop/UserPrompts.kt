@@ -48,8 +48,9 @@ class UiTools : DesktopBrainHost.ToolProvider {
 
     override fun turnStarted(kind: String) = Pages.beginTurn()
 
-    override fun dispatch(method: String, p: JSONObject, silent: Boolean, untrusted: Boolean): Any? = when (method) {
+    override fun dispatch(method: String, p: JSONObject, callId: String, silent: Boolean, untrusted: Boolean): Any? = when (method) {
         "ui.show_html" -> showHtml(p)
+        "ui.show_wiki" -> showWiki(p.optString("id"))
         "ui.list_pages" -> listPages()
         "ui.get_page" -> getPage(p)
         "ui.list_topics" -> listTopics()
@@ -236,13 +237,14 @@ object AskGate {
     private val waiting = androidx.compose.runtime.mutableStateOf(false)
     val isWaiting: Boolean get() = waiting.value
 
-    fun ask(question: String, buttons: List<String>, timeoutMs: Long): Result =
-        run(question, buttons, timeoutMs)
+    /** [speak] = false for a card the device raises itself (the launch-time version reminder): nobody asked. */
+    fun ask(question: String, buttons: List<String>, timeoutMs: Long, speak: Boolean = true): Result =
+        run(question, buttons, timeoutMs, speak)
 
     fun alert(text: String, timeoutMs: Long): Result =
         run(text, emptyList(), timeoutMs)
 
-    private fun run(question: String, buttons: List<String>, timeoutMs: Long): Result {
+    private fun run(question: String, buttons: List<String>, timeoutMs: Long, speak: Boolean = true): Result {
         val p = Pending(question, buttons, CompletableFuture(), System.currentTimeMillis() + timeoutMs)
         synchronized(this) {
             current?.answer?.complete(Result(null, null, "superseded"))
@@ -251,7 +253,7 @@ object AskGate {
         waiting.value = p.buttons.isNotEmpty()
         onChange()
         // Voice-first: the question is read out, exactly as the phone says it.
-        MacVoice.speak(question)
+        if (speak) MacVoice.speak(question)
         val r = runCatching { p.answer.get(timeoutMs, TimeUnit.MILLISECONDS) }
             .getOrDefault(Result(null, null, "timeout"))
         synchronized(this) { if (current === p) current = null }
@@ -353,4 +355,16 @@ fun AskCard(p: AskGate.Pending) {
             ) { Icon(AndeeIcon.CLOSE, Palette.secondary, 14.dp) }
         }
     }
-}
+}    /**
+     * wiki_show: bring the window up on the notebook's reader for that article. The article is read from its file
+     * there, so it is the latest version; nothing is copied. Returns at once.
+     */
+    private fun showWiki(id: String): JSONObject {
+        require(id.isNotBlank()) { "wiki_show requires id" }
+        val meta = DesktopNotebook.book.wiki.meta(id) ?: throw IllegalArgumentException("No article with id $id; wiki_search first.")
+        Assistant.openScreen("wiki:$id")
+        return JSONObject().put("shown", true).put("id", id).put("title", meta.title)
+            .put("note", "It is open in front of them. Say in a sentence what it is; do not paste it.")
+    }
+
+

@@ -158,6 +158,11 @@ class CommandDispatcher(
 ) {
     private val ui = Handler(Looper.getMainLooper())
 
+    /** Returns at once; the card goes up on the main thread. */
+    private fun showWiki(id: String) {
+        ui.post { net.kuafuai.andee.ui.NotebookUi(appContext, startWiki = id).show() }
+    }
+
     /** The bubble budget. One per dispatcher, so a service restart starts the count again — see [NudgeBook]. */
     val nudgeBook = net.kuafuai.andee.brain.NudgeBook()
 
@@ -320,6 +325,22 @@ class CommandDispatcher(
         // Checked before the fold below, so a refused call cannot so much as
         // move the card.
         TurnGuards.check(method, silent, untrusted)
+        // Provenance of notification/remote Hub commands is not user intent.
+        // Use the live active Accessibility root before every mutation.
+        // Original trusted owner turns take the exact same path as before.
+        if (untrusted) {
+            when {
+                method.startsWith("screen.") -> TurnGuards.checkUntrustedScreen(
+                    method,
+                    screenOrNull()?.livePackageForUntrustedGuard(),
+                    params?.optString("action"),
+                )
+                method == "device.launch" -> TurnGuards.messagingPackageForUntrustedLaunch(
+                    params?.optString("pkg"),
+                    params?.optString("label"),
+                )
+            }
+        }
         // The lock screen is a wall around the screen, and unlike every other
         // wall in this file it is one that fails *silently*. A gesture aimed at
         // a locked device is dropped by the input pipeline — `dispatchGesture`
@@ -384,8 +405,12 @@ class CommandDispatcher(
 
             // ---- device.* : actions, zero/low-friction ---------------------
             "device.launch" -> deviceActions.launchApp(
-                pkg = params?.optString("pkg")?.ifEmpty { null },
-                label = params?.optString("label")?.ifEmpty { null },
+                // For untrusted sources, pin the package rather than trusting
+                // a potentially spoofed app's display label.
+                pkg = if (untrusted) TurnGuards.messagingPackageForUntrustedLaunch(
+                    params?.optString("pkg"), params?.optString("label"),
+                ) else params?.optString("pkg")?.ifEmpty { null },
+                label = if (untrusted) null else params?.optString("label")?.ifEmpty { null },
             ).also {
                 // The one usage signal that needs no permission: what *we* opened. Used to rank the shelf
                 // when the system has not been allowed to say what the user opens.
@@ -472,6 +497,7 @@ class CommandDispatcher(
             // `screen.` even though `fill` types: reading the vault is not
             // operating the device, and `fill` does its own folding below.
             "device.vault.list" -> {
+                net.kuafuai.andee.config.VaultBioGate.requireUnlocked(appContext)
                 val arr = org.json.JSONArray()
                 for (e in net.kuafuai.andee.config.Vault.entries(appContext)) {
                     val fields = org.json.JSONObject()
@@ -487,6 +513,7 @@ class CommandDispatcher(
                 JSONObject().put("entries", arr).put("count", arr.length())
             }
             "device.vault.get" -> {
+                net.kuafuai.andee.config.VaultBioGate.requireUnlocked(appContext)
                 val who = requireNotNull(params?.optString("entry")?.ifEmpty { null }) {
                     "device.vault.get requires entry"
                 }
@@ -511,6 +538,7 @@ class CommandDispatcher(
                 JSONObject().put("entry", e.label).put("field", field).put("value", value)
             }
             "device.vault.fill" -> {
+                net.kuafuai.andee.config.VaultBioGate.requireUnlocked(appContext)
                 ensureCompact()
                 window.pulseTool()
                 val who = requireNotNull(params?.optString("entry")?.ifEmpty { null }) {
@@ -538,11 +566,10 @@ class CommandDispatcher(
                 // notification appop, which is off for a service with no
                 // launcher icon, and a silently dropped promise is worse than
                 // a quiet one.
-                window.setSubtitle(
-                    AppLocale.str(
-                        appContext, R.string.cmd_vault_filling, e.label, secretLabel(field),
-                    )
-                )
+                val filling = AppLocale.str(appContext, R.string.cmd_vault_filling, e.label, secretLabel(field))
+                window.setSubtitle(filling)
+                // And a row in the timeline, as on the Mac: the subtitle is gone once the card unfolds again.
+                net.kuafuai.andee.ui.PhoneTimeline.body(net.kuafuai.andee.ui.PhoneTimeline.Body.VAULT, filling)
                 requireScreen().typeText(value, id = null, secret = true)
             }
 
@@ -1450,6 +1477,7 @@ class CommandDispatcher(
                 val what = requireNotNull(params?.optString("what")?.trim()?.ifEmpty { null }) {
                     "note.todo requires what"
                 }
+                net.kuafuai.andee.config.NotebookBook.bundledTodo(what)?.let { throw IllegalArgumentException(it) }
                 val atRaw = params?.optString("at")?.trim().orEmpty()
                 val cronRaw = params?.optString("cron")?.trim().orEmpty()
                 require(atRaw.isNotEmpty() != cronRaw.isNotEmpty()) {
@@ -1529,6 +1557,25 @@ class CommandDispatcher(
                                     "minutes off — do not tell the user it is exactly on time."
                             },
                     )
+            }
+
+            // Andee's inner life (`LifeTools`): shared logic in core, the same handler as the Mac's, and nothing
+            // for the phone to arm. The tool-call id it records is set by the brain host before the call.
+            in net.kuafuai.andee.config.LifeTools.METHODS -> Notebook.life(appContext).handle(method, params).also { r ->
+                // wiki_write show=true: open what was just written — not from a quiet turn, where nobody asked to see it.
+                if (method == "note.wiki_write" && params?.optBoolean("show") == true && !silent && r.optBoolean("written")) {
+                    r.optJSONObject("meta")?.optString("id")?.takeIf { it.isNotEmpty() }?.let { showWiki(it); r.put("shown", true) }
+                }
+            }
+
+            // wiki_show: the notebook card, open on that article (read from its file there, so always the latest).
+            "ui.show_wiki" -> {
+                val id = params?.optString("id").orEmpty()
+                require(id.isNotBlank()) { "wiki_show requires id" }
+                val meta = Notebook.wiki(appContext).meta(id) ?: throw IllegalArgumentException("No article with id $id; wiki_search first.")
+                showWiki(id)
+                JSONObject().put("shown", true).put("id", id).put("title", meta.title)
+                    .put("note", "It is open in front of them. Say in a sentence what it is; do not paste it.")
             }
 
             // The plan (`Plans`): shared logic in core; here only the alarms it asks for.
@@ -1721,7 +1768,10 @@ class CommandDispatcher(
             // throws with the same "unknown method" line the else used to
             // produce, so a body with no peripherals reads exactly the same
             // as before this fallback existed.
-            else -> forwardExternal(method, params)
+            else -> {
+                if (untrusted) TurnGuards.checkUntrustedExtension(method)
+                forwardExternal(method, params)
+            }
         }
     }
 

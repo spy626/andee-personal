@@ -1,0 +1,138 @@
+#!/usr/bin/env python3
+"""Phase 9: narrow Vault biometric-only source gate.
+
+Strong credential-at-rest key binding plus verified migration; explicitly reject
+new approval checks in SMS, WhatsApp, normal taps and autonomous work.
+Source gate is not proof of on-device biometric behavior.
+"""
+from pathlib import Path
+import subprocess
+
+ROOT = Path(__file__).resolve().parents[1]
+PHASE8 = "33049233a157372db6eefc2864688815ebf776f7"
+
+def read(path):
+    return (ROOT / path).read_text(encoding="utf-8")
+
+def git(*args):
+    return subprocess.check_output(["git", *args], cwd=ROOT, text=True)
+
+allowed = {
+    "app/src/main/AndroidManifest.xml",
+    "app/src/main/java/net/kuafuai/andee/config/Vault.kt",
+    "app/src/main/java/net/kuafuai/andee/config/VaultBioGate.kt",
+    "app/src/main/java/net/kuafuai/andee/ui/VaultUnlockActivity.kt",
+    "app/src/main/java/net/kuafuai/andee/ui/VaultUi.kt",
+    "app/src/main/java/net/kuafuai/andee/net/CommandDispatcher.kt",
+    ".github/workflows/build.yml",
+    ".github/workflows/dco.yml",
+    "tools/verify_feature_preservation.py",
+    "tools/check_vault_biometric_only.py",
+    "docs/PHASE9_VAULT_BIOMETRIC_ONLY.md",
+    # Phase 9.1: screen-lock revocation and regression tests, no ordinary tool edits.
+    "app/src/androidTest/java/net/kuafuai/andee/acceptance/VaultScreenLockTest.java",
+    "tools/check_vault_screen_lock.py",
+    "docs/PHASE9_1_SCREEN_LOCK_REVOCATION.md",
+    # Phase 9.2: Settings must open without reading locked credentials.
+    "app/src/main/java/net/kuafuai/andee/ui/SettingsUi.kt",
+    "app/src/main/res/values/strings.xml",
+    "app/src/main/res/values-en/strings.xml",
+    "app/src/androidTest/java/net/kuafuai/andee/acceptance/SettingsLockedVaultTest.kt",
+    "tools/check_vault_settings_safe.py",
+    "docs/PHASE9_2_SETTINGS_CRASH_FIX.md",
+    # Phase 10A: clean Settings navigation only; no ordinary AI/voice runtime edits.
+    "app/src/androidTest/java/net/kuafuai/andee/acceptance/SettingsNavigationTest.kt",
+    "tools/check_settings_navigation.py",
+    "docs/PHASE10A_SETTINGS_NAVIGATION.md",
+    # Phase 10B.1: explicit free provider/zero-cost guard and encrypted keys only.
+    "app/src/main/java/net/kuafuai/andee/config/VoiceConfig.kt",
+    "app/src/main/java/net/kuafuai/andee/config/ProviderKeyStore.kt",
+    "app/src/main/java/net/kuafuai/andee/config/FactoryReset.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/config/BrainConfig.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/brain/LlmClient.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/brain/LocalBrain.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/brain/FreeProviderGuard.kt",
+    "core/src/test/kotlin/net/kuafuai/andee/brain/FreeProviderGuardTest.kt",
+    "app/src/androidTest/java/net/kuafuai/andee/acceptance/FreeProviderKeysTest.kt",
+    "tools/check_free_provider_scope.py",
+    "docs/PHASE10B1_FREE_PROVIDERS.md",
+    # Phase 10B.2: xKiro free catalog diagnostics and documented ID only.
+    "tools/check_xkiro_catalog_fix.py",
+    "docs/PHASE10B2_XKIRO_CATALOG_FIX.md",
+    # Phase 10B.3: xKiro free-only Auto routing and migration.
+    "tools/check_xkiro_auto_scope.py",
+    "docs/PHASE10B3_XKIRO_AUTO_FREE.md",
+    # Phase 10B.4: system Back on visible full card; exact-scope checker active.
+    "app/src/androidTest/java/net/kuafuai/andee/acceptance/AndroidBackNavigationTest.kt",
+    "tools/check_android_back_scope.py",
+    "docs/PHASE10B4_ANDROID_BACK.md",
+    # Phase 10B.5: Back overlay priority + fail-closed Groq/quota diagnostics.
+    "tools/check_phase10b5.py",
+    "docs/PHASE10B5_BACK_GROQ_QUOTA.md",
+    # Phase 10B.6: bounded LYRA-style Groq text-chat implementation.
+    "core/src/main/kotlin/net/kuafuai/andee/brain/LocalPrompt.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/brain/GroqChatContext.kt",
+    "core/src/test/kotlin/net/kuafuai/andee/brain/GroqChatContextTest.kt",
+    "docs/PHASE10B6_GROQ_LYRA_CHAT.md",
+    "tools/check_phase10b6.py",
+    "app/src/main/java/net/kuafuai/andee/ui/FloatingWindowUi.kt",
+    "app/src/main/java/net/kuafuai/andee/BodyCoreService.kt",
+    # Phase 10B.7: reviewed Gemini Live voice-only additions; no Vault/approval changes.
+    "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveSession.kt",
+    "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveTokenProvider.kt",
+    "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveToolAdapter.kt",
+    "app/src/main/java/net/kuafuai/andee/audio/GeminiLiveVoiceController.kt",
+    "app/src/test/java/net/kuafuai/andee/audio/GeminiLiveTokenProviderTest.kt",
+    "app/src/test/java/net/kuafuai/andee/audio/GeminiLiveToolAdapterTest.kt",
+}
+actual = set(git("diff", "--name-only", PHASE8, "HEAD").splitlines())
+assert actual <= allowed, f"Unreviewed changes outside Vault: {sorted(actual - allowed)}"
+
+vault = read("app/src/main/java/net/kuafuai/andee/config/Vault.kt")
+for token in (
+    ".setUserAuthenticationRequired(true)",
+    ".setUserAuthenticationParameters(600, KeyProperties.AUTH_BIOMETRIC_STRONG)",
+    "private const val KEY_BLOB_LEGACY",
+    "private const val KEY_BLOB_BIO",
+    "decryptLegacy(legacy)",
+    "decryptBiometric(encrypted) == original",
+    "putString(KEY_BLOB_BIO, encrypted).commit()",
+    "retireLegacy(preferences)",
+    "VaultBioGate.requireActive(context)",
+    "throw IllegalStateException",
+):
+    assert token in vault, f"Vault migration / biometric guard missing: {token}"
+migration = vault[vault.index("val legacy = preferences.getString(KEY_BLOB_LEGACY"):]
+assert migration.index("putString(KEY_BLOB_BIO, encrypted).commit()") < migration.index("retireLegacy(preferences)"), "old secrets removed before verified new commit"
+assert "emptyList()" not in vault[vault.index("}.getOrElse {"):vault.index("/** Insert or replace by [Entry.id]. */")], "failed Vault read treated as empty"
+
+bio = read("app/src/main/java/net/kuafuai/andee/config/VaultBioGate.kt")
+prompt = read("app/src/main/java/net/kuafuai/andee/ui/VaultUnlockActivity.kt")
+ui = read("app/src/main/java/net/kuafuai/andee/ui/VaultUi.kt")
+dispatch = read("app/src/main/java/net/kuafuai/andee/net/CommandDispatcher.kt")
+manifest = read("app/src/main/AndroidManifest.xml")
+assert "BIOMETRIC_STRONG" in prompt and "setAllowedAuthenticators" in prompt
+assert "setNegativeButton" in prompt and "respond(false)" in prompt
+assert "android.permission.USE_BIOMETRIC" in manifest
+assert 'android:name=".ui.VaultUnlockActivity"' in manifest and 'android:exported="false"' in manifest.split('android:name=".ui.VaultUnlockActivity"')[1].split("/>")[0]
+assert "VaultBioGate.request(context)" in ui and "VaultBioGate.ready(context)" in ui
+assert "lockWatcher" in ui and "VaultBioGate.ready(context)" in ui
+assert "VaultBioGate.requireUnlocked(appContext)" in dispatch
+assert dispatch.count("VaultBioGate.requireUnlocked(appContext)") == 3, "approval added outside Vault or Vault path missed"
+assert "VaultBioGate.requireActive(context)" in vault
+
+# The user explicitly requires *all* ordinary Andee behaviors as before.
+for path in (
+    "core/src/main/kotlin/net/kuafuai/andee/brain/SelfWork.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/brain/Heartbeat.kt",
+    "app/src/main/java/net/kuafuai/andee/device/DeviceCommsController.kt",
+    "app/src/main/java/net/kuafuai/andee/device/NotificationRelayService.kt",
+    "app/src/main/java/net/kuafuai/andee/ui/CardUi.kt",
+    "core/src/main/kotlin/net/kuafuai/andee/net/TurnGuards.kt",
+    "app/src/main/java/net/kuafuai/andee/screen/ScreenController.kt",
+    "app/src/main/java/net/kuafuai/andee/net/BodyWsServer.kt",
+):
+    assert git("rev-parse", f"{PHASE8}:{path}").strip() == git("rev-parse", f"HEAD:{path}").strip(), f"Original Andee behavior source modified: {path}"
+
+print("PASS: Vault biometric-only scope, strong Keystore auth, migration, original Andee features unchanged")
+print("LIMIT: physical fingerprint enrollment, saved-data migration and real-phone autofill require spare-phone acceptance")

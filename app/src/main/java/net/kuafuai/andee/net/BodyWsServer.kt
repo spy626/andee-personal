@@ -9,6 +9,8 @@ import org.json.JSONObject
 import java.net.InetSocketAddress
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
+import android.os.SystemClock
 import java.util.concurrent.CopyOnWriteArraySet
 import java.util.concurrent.SynchronousQueue
 import java.util.concurrent.TimeUnit
@@ -49,12 +51,13 @@ import java.util.concurrent.TimeUnit
  * [onCommand] returns a JSON-serializable value (usually JSONObject) or throws.
  * Thrown exceptions become error responses; nothing else propagates.
  *
- * Binding to 0.0.0.0 by default so the brain running on another host on the
- * LAN can reach it. Loopback-only is also fine when driven via adb forward.
+ * Binding is loopback-only by default. Existing adb-forward and same-device
+ * extension clients work, but unauthenticated LAN clients are rejected.
+ * NOTE: local Android apps can still reach loopback; authentication is pending.
  */
 class BodyWsServer(
     port: Int,
-    bindHost: String = "0.0.0.0",
+    bindHost: String = "127.0.0.1",
     private val registry: CallExtensionRegistry,
     /** Extension-pushed event; the service turns these into hub broadcasts + UI updates. */
     private val onExtensionEvent: (kind: String, data: JSONObject) -> Unit = { _, _ -> },
@@ -82,10 +85,28 @@ class BodyWsServer(
 
     /** `debug.sweep {"skip":true}` — the review with the silence gate bypassed. */
     private val onSweepForced: () -> Unit = {},
+    /**
+     * Authorize each local socket with a phone-side owner button tap. No
+     * pre-shared token is required of existing ADB or call-extension clients.
+     * Default denies all clients if the body has no consent UI.
+     */
+    private val requestPeerConsent: ((Boolean) -> Unit) -> Unit = { done -> done(false) },
 ) : WebSocketServer(InetSocketAddress(bindHost, port)) {
 
     /** Driver connections only — the ones broadcasts go to. Extensions never join. */
     private val active = CopyOnWriteArraySet<WebSocket>()
+
+    // No frames or broadcasts are trusted until the owner approves THIS socket.
+    // Even a passive viewer must be approved before joining [active].
+    private val authorized = CopyOnWriteArraySet<WebSocket>()
+    private val awaiting = ConcurrentHashMap<WebSocket, AwaitingPeer>()
+    private val consentInProgress = AtomicBoolean(false)
+    @Volatile private var nextPromptAllowedAtMs: Long = 0L
+
+    private class AwaitingPeer {
+        val frames = ArrayDeque<String>()
+        var authorized = false // guarded by synchronized(this)
+    }
 
     /**
      * In-flight reverse-requests we sent to the extension, keyed by envelope
@@ -99,14 +120,64 @@ class BodyWsServer(
     }
 
     override fun onOpen(conn: WebSocket, handshake: ClientHandshake?) {
-        // Provisionally treat every new connection as a driver. If a register
-        // frame arrives naming role=call_extension, we lift it back out.
-        active.add(conn)
-        Log.d(TAG, "onOpen ${conn.remoteSocketAddress} drivers=${active.size}")
+        if (conn.remoteSocketAddress?.address?.isLoopbackAddress != true) {
+            Log.w(TAG, "refusing non-loopback websocket connection")
+            conn.close(1008, "local only")
+            return
+        }
+        // Require deliberate local owner authorization for every *connection*.
+        // This preserves passive viewers and legacy extension protocols without
+        // exposing their first request/register or any broadcast beforehand.
+        val now = SystemClock.elapsedRealtime()
+        if (now < nextPromptAllowedAtMs || !consentInProgress.compareAndSet(false, true)) {
+            conn.close(1008, "owner consent busy or recently denied")
+            return
+        }
+        awaiting[conn] = AwaitingPeer()
+        try {
+            requestPeerConsent { granted ->
+                consentInProgress.set(false)
+                val peer = awaiting[conn] ?: return@requestPeerConsent // disconnected
+                if (!granted || !conn.isOpen) {
+                    if (!granted) nextPromptAllowedAtMs = SystemClock.elapsedRealtime() + DENIED_COOLDOWN_MS
+                    awaiting.remove(conn)
+                    conn.close(1008, "owner denied local connection")
+                    return@requestPeerConsent
+                }
+                // The same approved socket becomes a driver or (if it
+                // registered) an extension. Drain pre-consent frames in order.
+                active.add(conn)
+                while (conn.isOpen) {
+                    val batch = synchronized(peer) {
+                        if (peer.frames.isEmpty()) {
+                            authorized.add(conn)
+                            peer.authorized = true
+                            awaiting.remove(conn)
+                            emptyList()
+                        } else {
+                            peer.frames.toList().also { peer.frames.clear() }
+                        }
+                    }
+                    if (batch.isEmpty()) break
+                    for (frame in batch) {
+                        if (!conn.isOpen) break
+                        dispatchFrame(conn, frame)
+                    }
+                }
+            }
+        } catch (t: Throwable) {
+            consentInProgress.set(false)
+            awaiting.remove(conn)
+            Log.w(TAG, "local connection consent failed", t)
+            conn.close(1008, "owner consent unavailable")
+        }
+        Log.d(TAG, "local socket pending owner consent")
     }
 
     override fun onClose(conn: WebSocket, code: Int, reason: String?, remote: Boolean) {
         active.remove(conn)
+        authorized.remove(conn)
+        awaiting.remove(conn)
         if (registry.unregister(conn)) {
             Log.i(TAG, "call extension disconnected: ${conn.remoteSocketAddress} code=$code reason=$reason")
             // Nothing to talk to for any request we sent out — wake them all
@@ -118,6 +189,40 @@ class BodyWsServer(
     }
 
     override fun onMessage(conn: WebSocket, message: String) {
+        // Defense in depth: even if a future caller widens bindHost, remote
+        // clients cannot dispatch tools, register extensions or send events.
+        if (conn.remoteSocketAddress?.address?.isLoopbackAddress != true) {
+            Log.w(TAG, "refusing non-loopback websocket frame")
+            conn.close(1008, "local only")
+            return
+        }
+        val peer = awaiting[conn]
+        if (peer != null) {
+            var overflow = false
+            val wasQueued = synchronized(peer) {
+                if (peer.authorized) false
+                else if (message.length > MAX_PENDING_FRAME_CHARS || peer.frames.size >= MAX_PENDING_FRAMES) {
+                    overflow = true
+                    true
+                } else {
+                    peer.frames.addLast(message)
+                    true
+                }
+            }
+            if (overflow) {
+                awaiting.remove(conn)
+                conn.close(1008, "pending local connection exceeded limits")
+            }
+            if (wasQueued) return
+        }
+        if (!authorized.contains(conn)) {
+            conn.close(1008, "owner did not authorize this connection")
+            return
+        }
+        dispatchFrame(conn, message)
+    }
+
+    private fun dispatchFrame(conn: WebSocket, message: String) {
         val msg = runCatching { JSONObject(message) }.getOrNull()
         if (msg == null) {
             Log.w(TAG, "non-JSON message ignored: ${message.take(100)}")
@@ -126,7 +231,10 @@ class BodyWsServer(
         when (msg.optString("type")) {
             "request" -> handleDriverRequest(conn, msg)
             "register" -> handleRegister(conn, msg)
-            "response" -> handleExtensionResponse(msg)
+            "response" -> {
+                // Never let an approved driver spoof an extension's response.
+                if (registry.connection() === conn) handleExtensionResponse(msg)
+            }
             "event" -> handleExtensionEvent(conn, msg)
             else -> Log.d(TAG, "ignoring type=${msg.optString("type")}")
         }
@@ -251,6 +359,8 @@ class BodyWsServer(
         Log.e(TAG, "onError ${conn?.remoteSocketAddress}", ex)
         if (conn != null) {
             active.remove(conn)
+            authorized.remove(conn)
+            awaiting.remove(conn)
             if (registry.unregister(conn)) failAllPending("call extension error: ${ex.message}")
         }
     }
@@ -341,5 +451,8 @@ class BodyWsServer(
          * than as an anonymous hub timeout.
          */
         const val DEFAULT_EXTENSION_TIMEOUT_MS = 25_000L
+        private const val DENIED_COOLDOWN_MS = 30_000L
+        private const val MAX_PENDING_FRAMES = 24
+        private const val MAX_PENDING_FRAME_CHARS = 65_536
     }
 }

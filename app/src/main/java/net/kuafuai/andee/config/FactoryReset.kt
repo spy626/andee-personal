@@ -54,7 +54,12 @@ object FactoryReset {
     )
 
     private val TARGETS: List<Target> = listOf(
-        Target(R.string.factory_reset_target_keys) { prefs(it, "voice_prefs") },
+        Target(R.string.factory_reset_target_keys) {
+            prefs(it, "voice_prefs")
+            // Phase 10B.1: dedicated encrypted provider key material belongs to
+            // the SAME existing "keys" reset target, not an unlisted extra.
+            ProviderKeyStore.wipe(it)
+        },
 
         Target(R.string.factory_reset_target_notebook) { Notebook.wipe(it) },
 

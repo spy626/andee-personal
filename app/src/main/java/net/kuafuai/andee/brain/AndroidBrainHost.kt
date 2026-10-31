@@ -59,12 +59,15 @@ class AndroidBrainHost(
     override fun touchActivity() = Notebook.touchActivity(ctx)
 
     override fun notebookIndex(): String = Notebook.indexForPrompt(ctx)
+    override fun reviewRecord(): String = Notebook.recordForReview(ctx)
+    override fun todoStillActive(id: String): Boolean = Notebook.todoById(ctx, id)?.status == "active"
 
     override fun scenesIndex(): String = Notebook.scenesForPrompt(ctx)
 
     override fun scene(name: String): Scene? = Notebook.scene(ctx, name)
 
-    override fun scrollback(): List<ScrollRow> = ChatHistory.snapshot().map {
+    // Event rows are the device's record of what the brain did, not conversation: never handed back to it.
+    override fun scrollback(): List<ScrollRow> = ChatHistory.snapshot().filter { it.role != ChatHistory.Role.EVENT }.map {
         ScrollRow(
             isUser = it.role == ChatHistory.Role.USER,
             isAssistant = it.role == ChatHistory.Role.ASSISTANT,
@@ -85,8 +88,15 @@ class AndroidBrainHost(
 
     override fun topicsIndex(): String = ChatHistory.topicsForPrompt()
 
+    override fun event(e: net.kuafuai.andee.brain.BrainEvent) = net.kuafuai.andee.ui.PhoneTimeline.brain(ctx, e)
+
+    override fun selfIndex(): String = Notebook.selfhood(ctx).indexForPrompt()
+
+    override fun wikiIndex(): String = Notebook.wiki(ctx).indexForPrompt()
+
     override fun foldTopic(title: String, summary: String, rows: List<ScrollRow>, text: String): FoldedTopic? {
-        val entries = rows.map { it.handle as ChatHistory.Entry }
+        val said = rows.map { it.handle as ChatHistory.Entry }
+        val entries = (said + ChatHistory.eventsWithin(said)).sortedBy { it.id }
         val t = ChatHistory.foldTopic(title = title, summary = summary, rows = entries, text = text, parentId = null)
             ?: return null
         return FoldedTopic(id = t.id, title = t.title, summary = t.summary)
@@ -111,7 +121,8 @@ class AndroidBrainHost(
             ?: toolName.takeIf { market.hasMethod(it) }
             ?: net.kuafuai.andee.peer.PeerTasks.methodOf(toolName)
 
-    override fun dispatch(method: String, params: JSONObject, silent: Boolean, untrusted: Boolean): Any? {
+    override fun dispatch(method: String, params: JSONObject, callId: String, silent: Boolean, untrusted: Boolean): Any? {
+        Notebook.callBeingRun = callId
         // Not the dispatcher's: the link to the other devices is not part of this body, and the hub must never
         // see it. The turn guard still runs first — it is what keeps a stranger's notification from handing work on.
         if (method.startsWith("peer.")) {

@@ -44,8 +44,10 @@ object Vault {
 
     private const val TAG = "Body"
     private const val PREFS = "vault_prefs"
-    private const val KEY_BLOB = "entries"
-    private const val KEY_ALIAS = "body_vault_key"
+    private const val KEY_BLOB_LEGACY = "entries"
+    private const val KEY_ALIAS_LEGACY = "body_vault_key"
+    private const val KEY_BLOB_BIO = "entries_biometric_v1"
+    private const val KEY_ALIAS_BIO = "body_vault_biometric_v1"
     private const val GCM_TAG_BITS = 128
     private const val IV_BYTES = 12
 
@@ -123,9 +125,11 @@ object Vault {
         }?.ifBlank { null }
     }
 
+    @Synchronized
     fun entries(context: Context): List<Entry> {
-        val blob = prefs(context).getString(KEY_BLOB, null) ?: return emptyList()
-        val json = decrypt(blob) ?: return emptyList()
+        VaultBioGate.requireActive(context)
+        val blob = biometricBlob(context) ?: return emptyList()
+        val json = decryptBiometric(blob)
         return runCatching {
             val arr = JSONArray(json)
             (0 until arr.length()).map { i ->
@@ -145,17 +149,19 @@ object Vault {
                 )
             }.filter { it.id.isNotBlank() }
         }.getOrElse {
-            Log.e(TAG, "vault: entries unreadable", it)
-            emptyList()
+            // Damaged/locked vault must never appear empty: a save could erase it.
+            throw IllegalStateException("Vault data unreadable; saved data was not erased", it)
         }
     }
 
     /** Insert or replace by [Entry.id]. */
+    @Synchronized
     fun put(context: Context, entry: Entry) {
         val next = entries(context).filterNot { it.id == entry.id } + entry
         write(context, next)
     }
 
+    @Synchronized
     fun remove(context: Context, id: String) {
         write(context, entries(context).filterNot { it.id == id })
     }
@@ -202,7 +208,12 @@ object Vault {
      * reports success and the device may lose power a moment later.
      */
     fun wipe(context: Context) {
-        prefs(context).edit().clear().commit()
+        check(prefs(context).edit().clear().commit()) { "Vault reset could not persist" }
+        VaultBioGate.lockNow()
+        val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        for (alias in listOf(KEY_ALIAS_BIO, KEY_ALIAS_LEGACY)) {
+            runCatching { if (store.containsAlias(alias)) store.deleteEntry(alias) }
+        }
     }
 
     private fun write(context: Context, list: List<Entry>) {
@@ -223,63 +234,101 @@ object Vault {
                     .put("card_holder", e.cardHolder)
             )
         }
-        val blob = encrypt(arr.toString())
-        if (blob == null) {
-            // Silently keeping the old contents would let the user close the
-            // form believing a password was saved.
-            Log.e(TAG, "vault: encrypt failed, nothing written")
-            return
+        VaultBioGate.requireActive(context)
+        biometricBlob(context) // ensure legacy data is migrated before any write
+        val blob = encryptBiometric(arr.toString())
+        check(prefs(context).edit().putString(KEY_BLOB_BIO, blob).commit()) {
+            "Vault save failed; existing encrypted data remains stored"
         }
-        prefs(context).edit().putString(KEY_BLOB, blob).apply()
     }
 
     private fun prefs(context: Context) =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    // ---- crypto ----------------------------------------------------
+    // ---- biometric Keystore and lossless migration ------------------
 
-    private fun secretKey(): SecretKey {
+    /**
+     * The old key cannot be made biometric-required in-place. Use a NEW alias
+     * and never erase old ciphertext until the new copy is verified and saved.
+     * A biometric prompt gives the Keystore a 600-second auth window.
+     */
+    fun prepareBiometricKey(): SecretKey {
         val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-        (ks.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry)?.let { return it.secretKey }
+        (ks.getEntry(KEY_ALIAS_BIO, null) as? KeyStore.SecretKeyEntry)?.let {
+            return it.secretKey
+        }
         val gen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
         gen.init(
             KeyGenParameterSpec.Builder(
-                KEY_ALIAS,
-                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
+                KEY_ALIAS_BIO, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
             )
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                 .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                // No setUserAuthenticationRequired: the ball fills a password
-                // while the user is watching it work, not while they are at
-                // the lock screen, and a biometric prompt mid-task would stop
-                // the very automation this exists for.
+                .setUserAuthenticationRequired(true)
+                .setUserAuthenticationParameters(600, KeyProperties.AUTH_BIOMETRIC_STRONG)
                 .build()
         )
         return gen.generateKey()
     }
 
-    /** `base64(iv || ciphertext)`, or null if the Keystore refused. */
-    private fun encrypt(plain: String): String? = runCatching {
-        val c = Cipher.getInstance("AES/GCM/NoPadding")
-        c.init(Cipher.ENCRYPT_MODE, secretKey())
-        val body = c.doFinal(plain.toByteArray(Charsets.UTF_8))
-        Base64.encodeToString(c.iv + body, Base64.NO_WRAP)
-    }.getOrNull()
+    private fun biometricBlob(context: Context): String? {
+        VaultBioGate.requireActive(context)
+        val preferences = prefs(context)
+        val secured = preferences.getString(KEY_BLOB_BIO, null)
+        if (secured != null) {
+            // Crash recovery: old+new can coexist until migration cleanup.
+            if (preferences.contains(KEY_BLOB_LEGACY)) {
+                decryptBiometric(secured) // do not retire legacy without validation
+                retireLegacy(preferences)
+            }
+            return secured
+        }
+        val legacy = preferences.getString(KEY_BLOB_LEGACY, null) ?: return null
+        val original = decryptLegacy(legacy)
+        val encrypted = encryptBiometric(original)
+        check(decryptBiometric(encrypted) == original) {
+            "Vault migration verification failed; original data unchanged"
+        }
+        check(preferences.edit().putString(KEY_BLOB_BIO, encrypted).commit()) {
+            "Vault migration commit failed; original data unchanged"
+        }
+        retireLegacy(preferences)
+        return encrypted
+    }
 
-    private fun decrypt(blob: String): String? = runCatching {
-        val raw = Base64.decode(blob, Base64.NO_WRAP)
+    private fun retireLegacy(preferences: android.content.SharedPreferences) {
+        if (preferences.edit().remove(KEY_BLOB_LEGACY).commit()) {
+            runCatching {
+                val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+                if (ks.containsAlias(KEY_ALIAS_LEGACY)) ks.deleteEntry(KEY_ALIAS_LEGACY)
+            }
+        }
+        // If clearing failed, keep the new copy; retry after verified next read.
+    }
+
+    private fun decryptLegacy(blob: String): String {
+        val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        val old = (ks.getEntry(KEY_ALIAS_LEGACY, null) as? KeyStore.SecretKeyEntry)?.secretKey
+            ?: throw IllegalStateException("Old Vault key unavailable; saved blob remains intact")
+        return decryptWithKey(blob, old)
+    }
+
+    private fun encryptBiometric(text: String): String {
         val c = Cipher.getInstance("AES/GCM/NoPadding")
-        c.init(
-            Cipher.DECRYPT_MODE,
-            secretKey(),
-            GCMParameterSpec(GCM_TAG_BITS, raw, 0, IV_BYTES),
+        c.init(Cipher.ENCRYPT_MODE, prepareBiometricKey())
+        return Base64.encodeToString(
+            c.iv + c.doFinal(text.toByteArray(Charsets.UTF_8)), Base64.NO_WRAP,
         )
-        String(c.doFinal(raw, IV_BYTES, raw.size - IV_BYTES), Charsets.UTF_8)
-    }.getOrElse {
-        // A restored backup or a reset Keystore leaves an undecryptable blob.
-        // Say so in the log: from the settings screen it looks identical to
-        // never having saved anything.
-        Log.e(TAG, "vault: decrypt failed — entries are unreadable on this install", it)
-        null
+    }
+
+    private fun decryptBiometric(blob: String): String =
+        decryptWithKey(blob, prepareBiometricKey())
+
+    private fun decryptWithKey(blob: String, key: SecretKey): String {
+        val raw = Base64.decode(blob, Base64.NO_WRAP)
+        require(raw.size >= IV_BYTES + GCM_TAG_BITS / 8) { "Malformed Vault encryption" }
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(GCM_TAG_BITS, raw, 0, IV_BYTES))
+        return String(cipher.doFinal(raw, IV_BYTES, raw.size - IV_BYTES), Charsets.UTF_8)
     }
 }

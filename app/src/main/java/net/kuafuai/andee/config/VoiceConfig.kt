@@ -2,6 +2,7 @@ package net.kuafuai.andee.config
 
 import android.content.Context
 import net.kuafuai.andee.BuildConfig
+import net.kuafuai.andee.brain.FreeProviderGuard
 import java.util.UUID
 
 /**
@@ -52,6 +53,7 @@ object VoiceConfig {
             // which is the only way back to a baked-in key.
             "google_api_key", "google_project", "google_base_url", "google_location",
             "google_asr_model", "google_tts_model", "google_language",
+            "gemini_live_model", "gemini_live_voice", "gemini_live_personality",
         )
 
         const val DEFAULT_ASR_ENDPOINT = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async"
@@ -316,6 +318,7 @@ object VoiceConfig {
             val url: String,           // empty = don't dial out
             val deviceId: String,      // stable, generated once
             val deviceName: String,    // human-friendly, editable
+            val publicKey: String,     // verified remote Hub signing identity (P-256 SPKI)
         )
 
         fun hubConfig(context: Context): HubConfig {
@@ -329,6 +332,7 @@ object VoiceConfig {
                 url = p.getString("hub_url", "").orEmpty().trim(),
                 deviceId = deviceId,
                 deviceName = p.getString("device_name", "").orEmpty().ifEmpty { deviceId },
+                publicKey = p.getString("hub_public_key", "").orEmpty().trim(),
             )
         }
 
@@ -341,6 +345,26 @@ object VoiceConfig {
          * if the build enables it and otherwise to local. Unknown saved values
          * fail closed to local — same rule as [groundingEnabled].
          */
+        /** Gemini Live settings are independent of the selected text-model backend. */
+        fun geminiLiveModel(context: Context): String =
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getString("gemini_live_model", net.kuafuai.andee.audio.GeminiLiveSession.DEFAULT_MODEL)
+                .orEmpty().trim().ifEmpty { net.kuafuai.andee.audio.GeminiLiveSession.DEFAULT_MODEL }
+
+        fun geminiLiveVoice(context: Context): String {
+            val saved = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getString("gemini_live_voice", net.kuafuai.andee.audio.GeminiLiveSession.DEFAULT_VOICE)
+                .orEmpty().trim()
+            return saved.takeIf { it in setOf("Aoede", "Charon", "Kore", "Fenrir", "Puck", "Leda", "Orus", "Zephyr") }
+                ?: net.kuafuai.andee.audio.GeminiLiveSession.DEFAULT_VOICE
+        }
+
+        fun geminiLivePersonality(context: Context): String {
+            val saved = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getString("gemini_live_personality", "friend").orEmpty().trim().lowercase()
+            return saved.takeIf { it in setOf("friend", "professional", "assistant") } ?: "friend"
+        }
+
         fun brainMode(context: Context): String {
             val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             return resolveBrainMode(context, p.getString("brain", ""))
@@ -390,6 +414,37 @@ object VoiceConfig {
                         ?.trim()?.lowercase() != "disabled",
                     reasoningEffort = p.getString("llm_reasoning_effort", DEFAULT_REASONING_EFFORT)
                         .orEmpty().trim().ifEmpty { DEFAULT_REASONING_EFFORT },
+                )
+            }
+            // Phase 10B.1: only an explicitly selected local free provider
+            // overrides the legacy custom endpoint. CodeFlying and Hub never
+            // enter this path and retain their exact original behavior.
+            val freeProvider = p.getString("free_provider", FreeProviderGuard.LEGACY)
+                .orEmpty().trim().lowercase()
+            if (mode == BRAIN_LOCAL && freeProvider in setOf(
+                    FreeProviderGuard.XKIRO, FreeProviderGuard.GROQ,
+                    FreeProviderGuard.OPENROUTER,
+                )) {
+                val models = FreeProviderGuard.models(freeProvider)
+                val requested = p.getString("free_model_$freeProvider", models.first())
+                    .orEmpty().ifEmpty { models.first() }
+                // Old Phase 10B.2 installs may have the unavailable DeepSeek
+                // free ID saved. Migrate its *effective* choice safely to
+                // Auto; no direct/paid DeepSeek inference and no prefs wipe.
+                val chosen = requested.takeIf { it in models } ?: models.first()
+                val acknowledged = freeProvider != FreeProviderGuard.GROQ ||
+                    p.getString("free_groq_confirm", "off") == "on"
+                val credential = if (acknowledged) {
+                    runCatching { ProviderKeyStore.get(context, freeProvider) }.getOrDefault("")
+                } else ""
+                // A missing key or unapproved model fails closed in LlmClient.
+                // No fallback to another provider or to direct DeepSeek.
+                return BrainConfig(
+                    mode = BRAIN_LOCAL, apiKey = credential,
+                    baseUrl = FreeProviderGuard.endpoint(freeProvider),
+                    model = chosen, thinking = false,
+                    reasoningEffort = DEFAULT_REASONING_EFFORT,
+                    freeProvider = freeProvider,
                 )
             }
             // Language-dependent defaults: the blank-row fallback must be the
@@ -637,6 +692,11 @@ object VoiceConfig {
                 // override once saved could never be taken out.
                 // The card shows the key in effect, so saving it back unchanged must not
                 // pin the build's key as a user override: store only a different one.
+                // A blank public key deliberately revokes any previous Hub trust.
+                if (k == "hub_public_key" && v.isBlank()) {
+                    p.remove(k)
+                    continue
+                }
                 if (k == "codeflying_key" && v.trim() == codeFlyingBuiltInKey(context)) {
                     p.remove(k)
                     continue
@@ -690,7 +750,11 @@ object VoiceConfig {
                 "google_asr_model" to p.getString("google_asr_model", "").orEmpty(),
                 "google_tts_model" to p.getString("google_tts_model", "").orEmpty(),
                 "google_language" to p.getString("google_language", "").orEmpty(),
+                "gemini_live_model" to p.getString("gemini_live_model", net.kuafuai.andee.audio.GeminiLiveSession.DEFAULT_MODEL).orEmpty(),
+                "gemini_live_voice" to p.getString("gemini_live_voice", "Kore").orEmpty(),
+                "gemini_live_personality" to p.getString("gemini_live_personality", "friend").orEmpty(),
                 "hub_url" to hc.url,
+                "hub_public_key" to hc.publicKey,
                 "device_id" to hc.deviceId,
                 "device_name" to hc.deviceName,
                 // What the card selects: nothing saved is CodeFlying (the default tab for a
@@ -714,6 +778,17 @@ object VoiceConfig {
                 // a placeholder, and the row's language-aware hint
                 // ([llmModelDefault]: DeepSeek for a Chinese card, OpenAI for an
                 // English one) could never be seen.
+                "free_provider" to p.getString("free_provider", FreeProviderGuard.LEGACY)
+                    .orEmpty().ifBlank { FreeProviderGuard.LEGACY },
+                "free_model_xkiro" to p.getString("free_model_xkiro", FreeProviderGuard.XKIRO_AUTO)
+                    .orEmpty().takeIf { it in FreeProviderGuard.models(FreeProviderGuard.XKIRO) }
+                    .orEmpty().ifEmpty { FreeProviderGuard.XKIRO_AUTO },
+                "free_model_groq" to p.getString("free_model_groq", FreeProviderGuard.GROQ_120B)
+                    .orEmpty().ifBlank { FreeProviderGuard.GROQ_120B },
+                "free_model_openrouter" to p.getString("free_model_openrouter", FreeProviderGuard.OPENROUTER_AUTO)
+                    .orEmpty().ifBlank { FreeProviderGuard.OPENROUTER_AUTO },
+                "free_groq_confirm" to p.getString("free_groq_confirm", "off")
+                    .orEmpty().ifBlank { "off" },
                 "llm_api_key" to p.getString("llm_api_key", "").orEmpty(),
                 "llm_base_url" to p.getString("llm_base_url", "").orEmpty(),
                 "llm_model" to p.getString("llm_model", "").orEmpty(),
@@ -725,6 +800,7 @@ object VoiceConfig {
                 "grounding" to p.getString("grounding", "off")!!,
                 "notify" to notifyScope(context),
                 "nudge" to nudgeLevel(context),
+                "drive" to if (driveEnabled(context)) "on" else "off",
                 "lang" to uiLanguage(context),
                 "sweep" to p.getString("sweep", "on")!!,
                 "sweep_quiet_minutes" to p.getString(
@@ -769,7 +845,7 @@ object VoiceConfig {
          * (1..200) so a stray zero doesn't make the brain refuse everything
          * and a stray thousand doesn't burn an unbounded bill.
          */
-        const val DEFAULT_MAX_STEPS = 25
+        const val DEFAULT_MAX_STEPS = 40
 
         fun maxSteps(context: Context): Int =
             (context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -892,6 +968,26 @@ object VoiceConfig {
                 context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("nudge", null),
             ).key
 
+        /**
+         * Whether it may get up of its own accord — the heartbeat and the work turns it starts
+         * ([net.kuafuai.andee.brain.Heartbeat]). The design's 「让它歇着」 switch. **Unset is on and unrecognised is
+         * off**, the split [nudgeLevel] draws: a device nobody configured gets the behaviour the product is, and a
+         * value nobody can read permits nothing. Cheap when on: a beat calls the model only when a care is overdue.
+         */
+        /** 全部 / 只看对话 on the scrollback: whether event rows are shown. Unset is shown. */
+        fun timelineEvents(context: Context): Boolean =
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("timeline_events", null) != "off"
+
+        fun setTimelineEvents(context: Context, on: Boolean) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("timeline_events", if (on) "on" else "off").apply()
+        }
+
+        fun driveEnabled(context: Context): Boolean =
+            when (context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("drive", null)) {
+                null, "on" -> true
+                else -> false
+            }
+
         /** Bubble kinds the user long-pressed away. Written directly, like `scene`: it is a set, not a field. */
         /** The pointing model for `tap_target`, if the user named one; blank = [net.kuafuai.andee.brain.Locator.modelFor] picks. */
         fun locatorModel(context: Context): String =
@@ -975,14 +1071,18 @@ object VoiceConfig {
             "google_api_key", "google_base_url",
             "google_project", "google_location",
             "google_asr_model", "google_tts_model", "google_language",
-            "hub_url", "device_name",
+            "hub_url", "hub_public_key", "device_name",
             "brain",
             "show_hub",
             "llm_api_key", "llm_base_url", "llm_model",
+            "free_provider", "free_model_xkiro", "free_model_groq",
+            "free_model_openrouter", "free_groq_confirm",
             "llm_thinking", "llm_reasoning_effort",
             "grounding",
             "notify",
             "nudge",
+            "drive",
+            "timeline_events",
             "locator_model",
             "lang",
             "ball",

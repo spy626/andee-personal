@@ -3132,6 +3132,17 @@ class ScreenController(
         if (android.os.Build.VERSION.SDK_INT >= 33) service.getRootInActiveWindow(PREFETCH_WALK)
         else service.rootInActiveWindow
 
+    /**
+     * A live package observation for the untrusted gesture boundary.
+     * Never fall back to a previous tree dump or cached foreground package:
+     * either can still say WhatsApp after the user opens a banking app.
+     */
+    fun livePackageForUntrustedGuard(): String? = runCatching {
+        activeRoot()?.packageName?.toString()?.takeIf {
+            it.isNotBlank() && it != service.packageName
+        }
+    }.getOrNull()
+
     private fun rootOf(w: AccessibilityWindowInfo): AccessibilityNodeInfo? =
         if (android.os.Build.VERSION.SDK_INT >= 33) w.getRoot(PREFETCH_WALK) else w.root
 
@@ -3733,8 +3744,8 @@ class ScreenController(
         private const val SCREEN_SETTLE_MS = 380L
 
         private const val LOOP_HELP =
-            "Stuck-loop guard: this exact spot has been touched more than " +
-                "6 times within 5 minutes. The gesture was NOT executed. " +
+            net.kuafuai.andee.brain.AimHints.REPEAT_REFUSED + " (stuck-loop guard: more than " +
+                "6 times within 5 minutes). The gesture was NOT executed. " +
                 "Do not retry the same tap. Take a fresh screenshot or get_screen_element, " +
                 "pick a genuinely different approach, and if the goal still cannot " +
                 "be reached, stop and ask the user for help instead of continuing."

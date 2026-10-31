@@ -1,0 +1,19 @@
+# Andee Phase 10B.3 — xKiro Auto Free model selection
+
+Base: Phase 10B.2 phone-tested Qwen `3791ce5c5db4a9091e241d885825539bceeca4bd`. This is a separate Draft PR stacked on Phase 10B.2; no changes to main.
+
+## Owner's observed 118-second video
+On a phone, xKiro Qwen3 VL Plus Free replied to a short greeting and "how are you" follow-up, while old DeepSeek Free returned `model_not_listed`. Mascot reactions remained active. Owner requested removing DeepSeek from xKiro and adding an Auto mode similar to LYRA. CodeFlying key missing is expected in the test build and the user did not want CodeFlying or AudioRecord altered.
+
+## Actual behavior
+- xKiro choices: **Auto Free**, **Qwen Free**. The retired `deepseek/deepseek-v4.1-flash:free` is excluded from both selection and Auto candidates. Its constant stays only for old stored selection identification/testing. Existing stored DeepSeek choice resolves to safe Auto at runtime and Settings without discarding the encrypted xKiro key. No direct DeepSeek, no paid DeepSeek.
+- Auto uses **app-side** selection, NOT a plan-dependent paid xKiro smart routing feature. Each original `LlmClient.complete` call first GETs the public xKiro chat catalog and authenticated free-token quota. Every eligible candidate must have `access_tier=free`, explicit zero USD input/output and every priced token component, `capabilities.tools=true`, valid chat ID, and vision capability when the request carries image blocks. All DeepSeek IDs are excluded regardless of their current pricing.
+- Phone-verified `qwen/qwen3-vl-plus:free` is the first preferred model. After one successful completion, stick to that model across subsequent tool iterations and user turns to avoid random mid-task model personality changes. Dynamic catalog models remain eligible and will be used if preferred unavailable or a definite 404/429 response occurs. A limited maximum of **three models** per completion, with an independent live zero-cost/free quota preflight before every retry. No retries on timeout/uncertain 5xx, invalid credentials or paid-tier 403. No cross-provider fallback (not Groq/OpenRouter) and no wallet/pay-as-you-go.
+- The marker `xkiro/auto-free` lives only in Andee Settings and is always replaced with an actual verified free model ID before POST. Free quotas unknown/expired => no messages sent. Existing LocalBrain and tool execution, input chat history, memory, mascot and voice all unchanged.
+
+Official reference: https://docs.xkiro.com/api/list-models/ , https://docs.xkiro.com/models/tiers/ ; xKiro publicly lists 45 free models but not all support tools; only eligible chat tools models are routed. The paid xKiro "smart routing" plan feature is not used. LYRA's own policy also prefers consented free-only definitive fallback instead of random provider switching.
+
+## Tests and caveats
+- Update offline catalog fixtures: mixed free/paid, missing tools, image-compatibility, nonzero cache price, unlisted DeepSeek; eligible list and Qwen preference verified. Mocked GET-only preflight. Explicit 404/429 retry whitelist and max 3 attempts source contracts. Existing previous security/scope gates, strong-biometric Vault, signed Hub, Android Debug, Release/R8 and emulator tests retained.
+- No actual API key or live inference POST in CI. Green CI is not physical phone acceptance. User should test with existing encrypted key on spare phone: Settings->AI & Voice->xKiro->Auto Free, Save, "hi bro", follow-up, then manual Qwen. For a 404/429 failover, a real simulated provider error isn't induced by app; the rule is validated offline.
+- After multiple providers and Gemini Live are fully stable in real-phone tests, audit dependencies before deleting unused original options. Do not delete Huoshan/Google voice, CodeFlying, autonomous WORK or biometric Vault prematurely.

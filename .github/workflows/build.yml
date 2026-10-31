@@ -21,6 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Feature parity compares all files to original source commit.
 
       - uses: actions/setup-java@v4
         with:
@@ -34,6 +36,25 @@ jobs:
       # Host-side tests are template-only today, so this is a tripwire for the
       # day someone writes a real one rather than a meaningful gate now.
       - run: ./gradlew --no-daemon :app:testDebugUnitTest
+      - run: ./gradlew --no-daemon :core:test
+      - run: python3 tools/verify_feature_preservation.py
+      - run: python3 tools/check_network_transport.py
+      - run: python3 tools/check_local_connection_consent.py
+      - run: python3 tools/check_signed_hub_identity.py
+      - run: python3 tools/check_original_feature_contracts.py
+      - run: python3 tools/check_sensitive_turn_gates.py
+      - run: python3 tools/check_untrusted_screen_and_extension.py
+      - run: python3 tools/check_v080_feature_integration.py
+      - run: python3 tools/check_vault_biometric_only.py
+      - run: python3 tools/check_vault_screen_lock.py
+      - run: python3 tools/check_vault_settings_safe.py
+      - run: python3 tools/check_settings_navigation.py
+      - run: python3 tools/check_free_provider_scope.py
+      - run: python3 tools/check_xkiro_catalog_fix.py
+      - run: python3 tools/check_xkiro_auto_scope.py
+      - run: python3 tools/check_android_back_scope.py
+      - run: python3 tools/check_phase10b5.py
+      - run: python3 tools/check_phase10b6.py
 
       - uses: actions/upload-artifact@v4
         with:
@@ -43,6 +64,27 @@ jobs:
           # carried four copies of it. See the `splits` block in app/build.gradle.
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+  # Source-only gate: runs without Maven/Gradle downloads so a temporary
+  # third-party mirror outage cannot obscure whether feature parity passed.
+  vault-source-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: python3 tools/verify_feature_preservation.py
+      - run: python3 tools/check_original_feature_contracts.py
+      - run: python3 tools/check_v080_feature_integration.py
+      - run: python3 tools/check_vault_biometric_only.py
+      - run: python3 tools/check_vault_screen_lock.py
+      - run: python3 tools/check_vault_settings_safe.py
+      - run: python3 tools/check_settings_navigation.py
+      - run: python3 tools/check_free_provider_scope.py
+      - run: python3 tools/check_xkiro_catalog_fix.py
+      - run: python3 tools/check_xkiro_auto_scope.py
+      - run: python3 tools/check_android_back_scope.py
+      - run: python3 tools/check_phase10b5.py
 
   # assembleRelease is its own job rather than a step above, because it is a
   # *gate* and not a deliverable: the APK has no signingConfig and cannot be
@@ -64,3 +106,50 @@ jobs:
       - uses: gradle/actions/setup-gradle@v3
 
       - run: ./gradlew --no-daemon :app:assembleRelease
+
+  # Tests an actual TLS WebSocket adapter and fake legacy Hub, on host only.
+  # This job never connects to an Android device, SMS, WhatsApp or a real Hub.
+  signed-hub-adapter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r tools/requirements-hub-adapter.txt
+      - run: python -m unittest discover -s tools/tests -p 'test_hub_signed_adapter.py' -v
+      - run: python tools/check_hub_adapter.py
+
+  # Disposable Android emulator smoke tests; no SMS/WhatsApp messages sent,
+  # no notification/accessibility permissions granted or user API keys present.
+  # This is NOT real-phone acceptance or a production safety sign-off.
+  android-emulator-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v3
+
+      - name: Enable KVM for local emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Execute isolated Android 11 acceptance smoke tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: google_apis
+          profile: pixel_3a
+          disable-animations: true
+          emulator-options: -no-window -no-snapshot -noaudio -no-boot-anim -gpu swiftshader_indirect
+          script: ./gradlew --no-daemon :app:connectedDebugAndroidTest
+

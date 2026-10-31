@@ -67,6 +67,7 @@ class LlmClient(
     model: String,
     thinking: Boolean,
     reasoningEffort: String,
+    private val freeProvider: String = "legacy",
 ) {
 
     // Request parameters, read once per [complete]. Volatile because [retune]
@@ -75,6 +76,8 @@ class LlmClient(
     @Volatile private var model = model
     @Volatile private var thinking = thinking
     @Volatile private var reasoningEffort = reasoningEffort
+    /** Auto stays on the last successful free model until a definite rejection. */
+    @Volatile private var autoStickyModel: String? = null
 
     /**
      * Change what the next request asks for, without touching the endpoint or
@@ -154,49 +157,136 @@ class LlmClient(
      * @param noThinking ask without reasoning whatever the user's setting is.
      */
     fun complete(messages: List<JSONObject>, tools: JSONArray, noThinking: Boolean = false): Reply {
+        // LYRA-style Groq is an isolated text-chat route: compact recent dialogue,
+        // never attach Andee's device tool catalogue, notebook, files or screenshots.
+        val requestMessages = if (freeProvider == FreeProviderGuard.GROQ) {
+            GroqChatContext.compact(messages)
+        } else messages
         val msgArr = JSONArray()
-        for (m in messages) msgArr.put(m)
+        for (m in requestMessages) msgArr.put(m)
         val body = JSONObject()
             .put("model", model)
             .put("messages", msgArr)
             .put("stream", false)
-        if (tools.length() > 0) {
+        if (freeProvider == FreeProviderGuard.GROQ) {
+            body.put("max_completion_tokens", GroqChatContext.MAX_COMPLETION_TOKENS)
+        }
+        if (tools.length() > 0 && freeProvider != FreeProviderGuard.GROQ) {
             body.put("tools", tools).put("tool_choice", "auto")
         }
-        if (thinking && !noThinking) {
-            body.put("thinking", JSONObject().put("type", "enabled"))
-            body.put("reasoning_effort", reasoningEffort)
-        } else {
-            body.put("thinking", JSONObject().put("type", "disabled"))
-        }
-
-        val req = Request.Builder()
-            .url("$baseUrl/chat/completions")
-            .addHeader("Authorization", "Bearer $apiKey")
-            .addHeader("Content-Type", "application/json")
-            .post(body.toString().toRequestBody(JSON))
-            .build()
-
-        val call = http.newCall(req)
-        current = call
-        val text = try {
-            call.execute().use { resp ->
-                // Read the body either way: DeepSeek puts the useful part of an
-                // error (bad key, unknown model, context overflow) in the body,
-                // and a bare "HTTP 400" sends whoever is debugging to the wrong
-                // place entirely.
-                val raw = resp.body?.string().orEmpty()
-                if (resp.code in 300..399) {
-                    throw LlmMovedException(resp.code, resp.header("Location").orEmpty())
-                }
-                if (!resp.isSuccessful) {
-                    throw LlmHttpException(resp.code, raw)
-                }
-                raw
+        if (freeProvider == "legacy") {
+            // Preserve the exact original DeepSeek/CodeFlying wire contract.
+            if (thinking && !noThinking) {
+                body.put("thinking", JSONObject().put("type", "enabled"))
+                body.put("reasoning_effort", reasoningEffort)
+            } else {
+                body.put("thinking", JSONObject().put("type", "disabled"))
             }
-        } finally {
-            current = null
+        } else {
+            // Other OpenAI-compatible gateways may reject DeepSeek's custom
+            // thinking field. Never infer that an arbitrary paid model is free.
+            FreeProviderGuard.validate(freeProvider, baseUrl, model)
+            // This also enforces Groq's OFF-by-default Free-account switch:
+            // VoiceConfig supplies no key until explicitly acknowledged.
+            // Fail before constructing ANY inference request with user data.
+            if (apiKey.isBlank()) {
+                if (freeProvider == FreeProviderGuard.GROQ) {
+                    throw IllegalStateException(
+                        "Groq not ready: Free-account switch OFF or API key missing. " +
+                            "In Settings → AI & Voice → Groq Free, save your own key " +
+                            "and enable Free-account confirmation. No request sent."
+                    )
+                }
+                throw IllegalStateException("Free provider key missing; no request sent")
+            }
+            if (freeProvider == FreeProviderGuard.OPENROUTER) {
+                body.put("provider", JSONObject().put("max_price", JSONObject()
+                    .put("prompt", 0).put("completion", 0)))
+            }
         }
+        val autoXKiro = freeProvider == FreeProviderGuard.XKIRO &&
+            model == FreeProviderGuard.XKIRO_AUTO
+        val needsVision = messages.any { message ->
+            val content = message.optJSONArray("content") ?: return@any false
+            (0 until content.length()).any { n ->
+                content.optJSONObject(n)?.optString("type") == "image_url"
+            }
+        }
+        val candidates: List<String> = if (autoXKiro) {
+            // Verified against the live xKiro catalog & free quota before
+            // ANY user message, screenshot or tool metadata reaches provider.
+            val eligible = FreeProviderGuard.preflightXKiroAuto(http, apiKey, needsVision)
+            val sticky = autoStickyModel?.takeIf { it in eligible }
+            if (sticky != null) listOf(sticky) + eligible.filterNot { it == sticky }
+            else eligible
+        } else {
+            if (freeProvider == FreeProviderGuard.XKIRO) {
+                FreeProviderGuard.preflightXKiro(http, apiKey, model)
+            }
+            listOf(model)
+        }
+
+        // Groq GPT-OSS 20B/120B accept TEXT and tools, not image inputs.
+        // Refuse unsupported screenshots instead of leaking data to a failing
+        // call or silently removing the image needed for autonomous WORK.
+        if (freeProvider == FreeProviderGuard.GROQ && needsVision) {
+            throw IllegalStateException(
+                "Groq selected model is text-only; image/screenshot request blocked. " +
+                    "No request sent."
+            )
+        }
+
+        var resultText: String? = null
+        // Never attempt more than 3 xKiro free models in one complete() call.
+        // A 404/429 is a definite rejection; timeout/5xx/unknown failures
+        // remain non-retryable to avoid unsafe replay of private context.
+        for ((attempt, candidate) in candidates.take(if (autoXKiro) 3 else 1).withIndex()) {
+            if (autoXKiro && attempt > 0) {
+                // Before every retry POST, independently verify the fresh
+                // zero-cost catalog and free quota again.
+                if (candidate !in FreeProviderGuard.preflightXKiroAuto(
+                        http, apiKey, needsVision,
+                    )) continue
+            }
+            body.put("model", candidate) // never send "xkiro/auto-free" to gateway
+            val req = Request.Builder()
+                .url("$baseUrl/chat/completions")
+                .addHeader("Authorization", "Bearer $apiKey")
+                .addHeader("Content-Type", "application/json")
+                .post(body.toString().toRequestBody(JSON))
+                .build()
+            val call = http.newCall(req)
+            current = call
+            try {
+                call.execute().use { resp ->
+                    val raw = resp.body?.string().orEmpty()
+                    if (resp.code in 300..399) {
+                        throw LlmMovedException(resp.code, resp.header("Location").orEmpty())
+                    }
+                    if (!resp.isSuccessful) {
+                        // Same user-selected xKiro provider and same encrypted
+                        // key, never Groq/OpenRouter/DeepSeek or paid fallback.
+                        if (autoXKiro && FreeProviderGuard.autoRetryable(resp.code) &&
+                            attempt < 2 && attempt < candidates.size - 1) {
+                            return@use
+                        }
+                        if (freeProvider == FreeProviderGuard.GROQ) {
+                            throw IllegalStateException(
+                                "Groq HTTP ${resp.code}: " + FreeProviderGuard.groqErrorHint(resp.code)
+                            )
+                        }
+                        throw LlmHttpException(resp.code, raw)
+                    }
+                    resultText = raw
+                    if (autoXKiro) autoStickyModel = candidate
+                }
+            } finally {
+                current = null
+            }
+            if (resultText != null) break
+        }
+        val text = resultText
+            ?: throw java.io.IOException("xKiro Auto free models unavailable; no paid fallback")
 
         // A 200 that is not JSON is a web server answering where the API should: a proxy page, a login wall.
         val root = runCatching { JSONObject(text) }.getOrElse {
@@ -222,6 +312,12 @@ class LlmClient(
                     argumentsRaw = fn.optString("arguments"),
                 )
             }
+        }
+
+        if (freeProvider == FreeProviderGuard.GROQ && calls.isNotEmpty()) {
+            throw IllegalStateException(
+                "Groq text-chat returned unsupported tool calls; no device action was executed"
+            )
         }
 
         val usage = root.optJSONObject("usage")

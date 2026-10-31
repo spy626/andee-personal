@@ -95,10 +95,8 @@ fun SelfCheckCard(onDone: () -> Unit, onOpenSettings: () -> Unit) {
         add(when (val r = version) {
             null -> CheckRow("version", if (zh) "版本" else "Version", true, if (zh) "检查中…（当前 $v）" else "Checking… (you are on $v)", null, quiet = true)
             is VersionCheck.Result.Current -> CheckRow("version", if (zh) "版本" else "Version", true, if (zh) "$v 已经是最新。" else "$v is the latest.", null)
-            is VersionCheck.Result.Behind -> CheckRow("version", if (zh) "版本" else "Version", false,
-                if (r.forced) { if (zh) "请升级到 ${r.latest} —— 你现在这个（$v）已经不再支持了。到 GitHub 下载。" else "Please upgrade to ${r.latest} — this build ($v) is no longer supported. Get it from GitHub." }
-                else { if (zh) "版本落后了：最新是 ${r.latest}，你现在是 $v。请到 GitHub 下载升级。" else "Out of date: the latest is ${r.latest}, you are on $v. Please upgrade from GitHub." },
-                { runCatching { net.kuafuai.andee.desktop.mac.Bridge.open(r.url) } }, red = true)
+            is VersionCheck.Result.Behind -> CheckRow("version", if (zh) "版本" else "Version", false, VersionCheck.behindText(r),
+                { runCatching { net.kuafuai.andee.desktop.mac.Bridge.open(VersionCheck.upgradeUrl()) } }, red = true)
             // Could not be determined is never the user's fault: a quiet note that still names the build.
             is VersionCheck.Result.Unknown -> CheckRow("version", if (zh) "版本" else "Version", true,
                 if (zh) "没能查到最新版本。当前 $v。" else "Could not check for updates. You are on $v.", null, quiet = true)
@@ -128,7 +126,7 @@ fun SelfCheckCard(onDone: () -> Unit, onOpenSettings: () -> Unit) {
                     Text(r.why, color = if (r.red) Palette.danger else Palette.secondary, fontSize = 11.sp)
                 }
                 if (!r.ok && r.fix != null) {
-                    Text(if (r.id == "version") (if (zh) "去 GitHub" else "GitHub") else if (zh) "去处理" else "Fix", color = Palette.accent, fontSize = 13.sp,
+                    Text(if (r.id == "version") (if (zh) "去升级" else "Upgrade") else if (zh) "去处理" else "Fix", color = Palette.accent, fontSize = 13.sp,
                         modifier = Modifier.clickable { r.fix?.invoke() }.padding(6.dp))
                 }
             }
@@ -193,7 +191,7 @@ fun ArtifactsCard(onDone: () -> Unit, onContinue: () -> Unit) {
                                 Text(if (zh) "回退到这版" else "Roll back", color = Palette.accent, fontSize = 12.sp,
                                     modifier = Modifier.clickable {
                                         Pages.restoreVersion(v.id)
-                                        Scrollback.add(Scrollback.Role.ASSISTANT, "已把「${v.title}」回退到 v${v.version}")
+                                        TimelineEvents.body(TimelineEvents.Body.PAGE, if (zh) "把「${v.title}」回退到 v${v.version}" else "Rolled \"${v.title}\" back to v${v.version}")
                                         refresh++
                                     }.padding(vertical = 3.dp))
                             }
@@ -258,57 +256,341 @@ fun VaultCard(onDone: () -> Unit) {
 
 /** 小本本: what Andee remembers, browsable and deletable — plus the todos it owes. */
 @Composable
-fun NotebookCard(onDone: () -> Unit) {
+fun NotebookCard(onDone: () -> Unit, startTab: Int = 0, startWiki: String? = null) {
     val zh = Strings.lang() == "zh"
+    var selectedTab by remember { mutableStateOf(startTab) }
     var refresh by remember { mutableStateOf(0) }
-    val memories = DesktopNotebook.book.memories().sortedByDescending { it.importance }
-    val todos = DesktopNotebook.book.todos("pending").filter { it.status in listOf("active", "paused") }
-        .sortedBy { if (it.nextRunAt > 0) it.nextRunAt else Long.MAX_VALUE }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
-        GlassHeader(if (zh) "小本本" else "Notebook", if (zh) "它记得的事" else "What it remembers", onClose = onDone,
-            trailing = {
-                Text(if (zh) "复制全部" else "Copy all", color = Palette.accent, fontSize = 13.sp,
-                    modifier = Modifier.clickable {
-                        val dump = memories.joinToString("\n\n") { "【${it.name}】${it.type}\n${it.description}" }
-                        java.awt.Toolkit.getDefaultToolkit().systemClipboard
-                            .setContents(java.awt.datatransfer.StringSelection(dump), null)
-                    }.padding(6.dp))
-            })
 
-        SectionTitle(if (zh) "记忆" else "Memories")
-        if (memories.isEmpty()) {
-            Text(if (zh) "还没有记住什么。" else "Nothing remembered yet.", color = Palette.photoInk, fontSize = 13.sp)
-        }
-        for (m in memories) {
-            Column(Modifier.fillMaxWidth().glassPanel(14).padding(12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(m.name, color = Palette.label, fontSize = 14.sp)
-                        Text("${m.type} · ${m.description.take(60)}", color = Palette.secondary, fontSize = 11.sp)
-                    }
-                    Text(if (zh) "删除" else "Delete", color = Palette.danger, fontSize = 12.sp,
-                        modifier = Modifier.clickable { DesktopNotebook.book.forget(m.name); refresh++ }.padding(6.dp))
-                }
+    val tabs = if (zh) listOf("自己", "在意", "日记", "打算", "人", "维基", "记忆", "待办")
+               else listOf("Self", "Cares", "Diary", "Plan", "People", "Wiki", "Memories", "Todos")
+
+    Column(Modifier.fillMaxSize().padding(start = 20.dp, top = 20.dp, end = 20.dp)) {
+        GlassHeader(if (zh) "小本本" else "Notebook", if (zh) "它记得的事" else "What it remembers", onClose = onDone)
+
+        // Tabs
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            tabs.forEachIndexed { index, label ->
+                val selected = selectedTab == index
+                Text(label,
+                    color = if (selected) Palette.accent else Palette.secondary,
+                    fontSize = 13.sp,
+                    modifier = Modifier
+                        .clickable { selectedTab = index }
+                        .background(
+                            if (selected) Palette.accent.copy(alpha = 0.1f) else Color.Transparent,
+                            RoundedCornerShape(8.dp)
+                        )
+                        .padding(10.dp, 6.dp))
             }
-            Spacer(Modifier.height(8.dp))
         }
 
-        SectionTitle(if (zh) "待办" else "Todos")
-        if (todos.isEmpty()) {
-            Text(if (zh) "没有待办。" else "Nothing pending.", color = Palette.photoInk, fontSize = 13.sp)
-        }
-        for (t in todos) {
-            Row(Modifier.fillMaxWidth().glassPanel(14).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(t.what, color = Palette.label, fontSize = 13.sp)
-                    val whenTxt = if (t.mode == "cron") t.cronExpr else LocalTime.format(t.at)
-                    Text(whenTxt + (if (t.status == "paused") "（暂停）" else ""), color = Palette.secondary, fontSize = 11.sp)
-                }
+        Spacer(Modifier.padding(top = 10.dp).height(1.dp).fillMaxWidth().background(Palette.hairline))
+
+        // Content
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(vertical = 20.dp)) {
+            when (selectedTab) {
+                0 -> SelfTab(zh, refresh) { refresh++ }
+                1 -> CaresTab(zh, refresh) { refresh++ }
+                2 -> DiaryTab(zh, refresh) { refresh++ }
+                3 -> PlanTab(zh, refresh) { refresh++ }
+                4 -> PeopleTab(zh, refresh) { refresh++ }
+                5 -> WikiTab(zh, refresh, startWiki) { refresh++ }
+                6 -> MemoriesTab(zh, refresh) { refresh++ }
+                7 -> TodosTab(zh, refresh) { refresh++ }
             }
-            Spacer(Modifier.height(8.dp))
         }
     }
 }
+
+// ---- Tab implementations ----
+
+@Composable
+private fun SelfTab(zh: Boolean, refresh: Int, onRefresh: () -> Unit) {
+    val narrative = DesktopNotebook.book.selfhood.narrative()
+    
+    if (narrative == null) {
+        EmptyState(if (zh) "还没有自我描述" else "No self-description yet",
+            if (zh) "跟 Andee 对话时，它会逐渐形成自我认知" else "Andee will develop self-awareness as you talk")
+        return
+    }
+    
+    Column(Modifier.fillMaxWidth().glassPanel(16).padding(16.dp)) {
+        Text(if (zh) "我是谁" else "Who I am", color = Palette.label, fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+        Spacer(Modifier.height(10.dp))
+        Markdown(narrative.text, color = Palette.photoInk)
+        Spacer(Modifier.height(8.dp))
+        Text(if (zh) "更新于 ${LocalTime.format(narrative.updatedAt)}" else "Updated ${LocalTime.format(narrative.updatedAt)}", 
+            color = Palette.secondary, fontSize = 11.sp)
+    }
+}
+
+@Composable
+private fun CaresTab(zh: Boolean, refresh: Int, onRefresh: () -> Unit) {
+    val cares = DesktopNotebook.book.selfhood.cares().filter { it.status == "active" }
+        .sortedByDescending { DesktopNotebook.book.selfhood.overdue(it) }
+    
+    if (cares.isEmpty()) {
+        EmptyState(if (zh) "还没有在意的事" else "No cares yet",
+            if (zh) "告诉 Andee 你在意什么，它会帮你留意" else "Tell Andee what you care about")
+        return
+    }
+    
+    for (care in cares) {
+        CareCard(care, zh, onRefresh)
+        Spacer(Modifier.height(10.dp))
+    }
+}
+
+@Composable
+private fun DiaryTab(zh: Boolean, refresh: Int, onRefresh: () -> Unit) {
+    val pages = DesktopNotebook.book.selfhood.diary(7)
+    OnItsOwn(zh)
+
+    if (pages.isEmpty()) {
+        EmptyState(if (zh) "还没有日记" else "No diary yet",
+            if (zh) "Andee 会在一天结束时自动记录" else "Andee will write at the end of the day")
+        return
+    }
+    
+    for (page in pages) {
+        Column(Modifier.fillMaxWidth().glassPanel(16).padding(16.dp)) {
+            Text(page.date, color = Palette.secondary, fontSize = 12.sp)
+            Spacer(Modifier.height(10.dp))
+            Markdown(page.text)
+        }
+        Spacer(Modifier.height(12.dp))
+    }
+}
+
+/** Today's thoughts and the last thing it did by itself — the device's record, so nothing it did unasked is invisible. */
+@Composable
+private fun OnItsOwn(zh: Boolean) {
+    val drive = DesktopNotebook.drive
+    val thoughts = drive.thoughtsToday()
+    val last = drive.lastWork()
+    if (thoughts.isEmpty() && last == null) return
+    Column(Modifier.fillMaxWidth().glassPanel(16).padding(16.dp)) {
+        Text(if (zh) "它自己" else "On its own", color = Palette.secondary, fontSize = 12.sp)
+        if (last != null) {
+            Spacer(Modifier.height(8.dp))
+            val did = when (last.effect) { "acted" -> if (zh) "动手做了" else "worked on"; "looked" -> if (zh) "看了看" else "looked at"; else -> if (zh) "想了想" else "thought about" }
+            Text("${LocalTime.format(last.at)} · $did「${last.what}」", color = Palette.label, fontSize = 13.sp)
+            if (last.summary.isNotBlank()) Markdown(last.summary, color = Palette.photoInk, size = 13.sp, modifier = Modifier.padding(top = 4.dp))
+        }
+        if (thoughts.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            Text(if (zh) "今天的念头" else "Thoughts today", color = Palette.secondary, fontSize = 12.sp)
+            for (t in thoughts.reversed()) Text("· " + t.text, color = Palette.photoInk, fontSize = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(top = 4.dp))
+        }
+    }
+    Spacer(Modifier.height(12.dp))
+}
+
+/** Today's plan, the long-term directions and 告诉它一句 — everything Settings used to show, now only here. */
+@Composable
+private fun PlanTab(zh: Boolean, refresh: Int, onRefresh: () -> Unit) {
+    Column(Modifier.fillMaxWidth().glassPanel(16).padding(16.dp)) { PlanSection(zh) }
+}
+
+@Composable
+private fun PeopleTab(zh: Boolean, refresh: Int, onRefresh: () -> Unit) {
+    val people = DesktopNotebook.book.people.all().filter { it.status == "active" }
+    
+    if (people.isEmpty()) {
+        EmptyState(if (zh) "还没有记录的人" else "No people yet",
+            if (zh) "Andee 会记住你提到的重要的人" else "Andee will remember important people you mention")
+        return
+    }
+    
+    for (person in people) {
+        PersonCard(person, onRefresh)
+        Spacer(Modifier.height(12.dp))
+    }
+}
+
+@Composable
+private fun WikiTab(zh: Boolean, refresh: Int, startWiki: String? = null, onRefresh: () -> Unit) {
+    var openId by remember { mutableStateOf(startWiki) }
+    openId?.let { id -> WikiArticle(id, zh, onBack = { openId = null; onRefresh() }); return }
+    val wikiEntries = DesktopNotebook.book.wiki.all().sortedByDescending { it.updated }
+    
+    if (wikiEntries.isEmpty()) {
+        EmptyState(if (zh) "维基还是空的" else "Wiki is empty",
+            if (zh) "问 Andee 知识性的问题，它会保存到维基" else "Ask Andee knowledge questions")
+        return
+    }
+    
+    for (entry in wikiEntries) {
+        WikiCard(entry, zh, onOpen = { openId = entry.id })
+        Spacer(Modifier.height(10.dp))
+    }
+}
+
+@Composable
+private fun MemoriesTab(zh: Boolean, refresh: Int, onRefresh: () -> Unit) {
+    val memories = DesktopNotebook.book.memories().sortedByDescending { it.importance }
+    
+    if (memories.isEmpty()) {
+        EmptyState(if (zh) "还没有记住什么" else "Nothing remembered yet")
+        return
+    }
+    
+    for (m in memories) {
+        var open by remember(m.name) { mutableStateOf(false) }
+        Column(Modifier.fillMaxWidth().glassPanel(14).clickable { open = !open }.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(m.name, color = Palette.label, fontSize = 14.sp)
+                    Text("${m.type} · ${m.description.take(60)}", color = Palette.secondary, fontSize = 11.sp)
+                }
+                Text(if (zh) "删除" else "Delete", color = Palette.danger, fontSize = 12.sp,
+                    modifier = Modifier.clickable { DesktopNotebook.book.forget(m.name); onRefresh() }.padding(6.dp))
+            }
+            if (open && m.content.isNotBlank()) {
+                Spacer(Modifier.height(10.dp))
+                Markdown(m.content, color = Palette.photoInk, size = 13.sp)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun TodosTab(zh: Boolean, refresh: Int, onRefresh: () -> Unit) {
+    val todos = DesktopNotebook.book.todos("pending").filter { it.status in listOf("active", "paused") }
+        .sortedBy { if (it.nextRunAt > 0) it.nextRunAt else Long.MAX_VALUE }
+    
+    if (todos.isEmpty()) {
+        EmptyState(if (zh) "没有待办" else "Nothing pending")
+        return
+    }
+    
+    for (t in todos) {
+        Row(Modifier.fillMaxWidth().glassPanel(14).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(t.what, color = Palette.label, fontSize = 13.sp)
+                val whenTxt = if (t.mode == "cron") t.cronExpr else LocalTime.format(t.at)
+                Text(whenTxt + (if (t.status == "paused") "（暂停）" else ""), color = Palette.secondary, fontSize = 11.sp)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+    }
+}
+
+// ---- UI Components ----
+
+@Composable
+private fun EmptyState(title: String, subtitle: String? = null) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(title, color = Palette.secondary, fontSize = 14.sp)
+        if (subtitle != null) {
+            Spacer(Modifier.height(4.dp))
+            Text(subtitle, color = Palette.photoInk, fontSize = 12.sp)
+        }
+    }
+}
+
+@Composable
+private fun CareCard(care: net.kuafuai.andee.config.Selfhood.Care, zh: Boolean, onRefresh: () -> Unit) {
+    Column(Modifier.fillMaxWidth().glassPanel(14).padding(14.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+            Column(Modifier.weight(1f)) {
+                Text(care.what, color = Palette.label, fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+                if (care.why.isNotEmpty()) {
+                    Spacer(Modifier.height(4.dp))
+                    Markdown(care.why, color = Palette.photoInk, size = 13.sp)
+                }
+                if (care.note.isNotEmpty()) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(care.note, color = Palette.secondary, fontSize = 12.sp)
+                }
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(care.kind, color = Palette.secondary, fontSize = 11.sp)
+            val overdue = DesktopNotebook.book.selfhood.overdue(care)
+            if (overdue > 0.5) {
+                Text(if (zh) "需要关注" else "Needs attention", color = Palette.accent, fontSize = 11.sp)
+            }
+        }
+    }
+}
+
+@Composable  
+private fun PersonCard(person: net.kuafuai.andee.config.People.Person, onRefresh: () -> Unit) {
+    Column(Modifier.fillMaxWidth().glassPanel(14).padding(14.dp)) {
+        Text(person.name, color = Palette.label, fontSize = 15.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+        if (person.relation.isNotEmpty()) {
+            Spacer(Modifier.height(4.dp))
+            Text(person.relation, color = Palette.secondary, fontSize = 12.sp)
+        }
+        if (person.impressions.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            Markdown(person.impressions.first().text, color = Palette.photoInk, size = 13.sp)
+        }
+    }
+}
+
+@Composable
+private fun WikiCard(entry: net.kuafuai.andee.wiki.Meta, zh: Boolean, onOpen: () -> Unit) {
+    Column(Modifier.fillMaxWidth().glassPanel(14).clickable(onClick = onOpen).padding(14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(entry.title, color = Palette.label, fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium, modifier = Modifier.weight(1f))
+            Text(if (zh) "打开 ›" else "Open ›", color = Palette.accent, fontSize = 12.sp)
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(wikiLine(entry, zh), color = Palette.secondary, fontSize = 11.sp)
+        if (entry.summary.isNotBlank()) {
+            Spacer(Modifier.height(6.dp))
+            // The summary is the start of the body, markup and all; a two-line preview reads only its prose.
+            Text(net.kuafuai.andee.text.Md.preview(entry.summary), color = Palette.photoInk, fontSize = 13.sp, lineHeight = 19.sp, maxLines = 2)
+        }
+    }
+}
+
+private fun wikiLine(m: net.kuafuai.andee.wiki.Meta, zh: Boolean): String =
+    listOf(m.kind, "v${m.version}", m.status.key, LocalTime.format(m.updated)).joinToString(" · ")
+
+/** One article, read from its source now — the body is the file, not the index's summary of it. */
+@Composable
+private fun WikiArticle(id: String, zh: Boolean, onBack: () -> Unit) {
+    var article by remember(id) { mutableStateOf<Result<net.kuafuai.andee.wiki.Article>?>(null) }
+    LaunchedEffect(id) {
+        article = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { DesktopNotebook.book.wiki.read(id) }
+    }
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(if (zh) "‹ 维基" else "‹ Wiki", color = Palette.accent, fontSize = 13.sp,
+            modifier = Modifier.clickable(onClick = onBack).padding(vertical = 6.dp, horizontal = 2.dp))
+        Spacer(Modifier.weight(1f))
+        val meta = article?.getOrNull()?.meta
+        val local = meta?.takeIf { it.where == "local" }?.let { DesktopNotebook.book.localWikiStore as? net.kuafuai.andee.wiki.LocalWikiStore }
+        if (meta != null && local != null) {
+            Text(if (zh) "在访达中显示" else "Show in Finder", color = Palette.accent, fontSize = 12.sp,
+                modifier = Modifier.clickable {
+                    runCatching { ProcessBuilder("/usr/bin/open", "-R", java.io.File(local.folder(), meta.ref).path).start() }
+                }.padding(6.dp))
+        }
+    }
+    Spacer(Modifier.height(10.dp))
+    val r = article
+    when {
+        r == null -> Text(if (zh) "正在读取…" else "Reading…", color = Palette.secondary, fontSize = 13.sp)
+        r.isFailure -> Text(r.exceptionOrNull()?.message ?: "", color = Palette.danger, fontSize = 13.sp)
+        else -> {
+            val a = r.getOrThrow()
+            Column(Modifier.fillMaxWidth().glassPanel(16).padding(20.dp)) {
+                Text(wikiLine(a.meta, zh), color = Palette.secondary, fontSize = 11.sp)
+                if (a.meta.source.isNotBlank()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text((if (zh) "来源：" else "Source: ") + a.meta.source, color = Palette.secondary, fontSize = 11.sp, lineHeight = 16.sp)
+                }
+                Spacer(Modifier.height(14.dp))
+                Markdown(a.body)
+            }
+        }
+    }
+}
+
 
 /** 情景: the ways of working Andee has learned — enter, leave, read, delete. */
 @Composable

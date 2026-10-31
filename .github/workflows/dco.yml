@@ -1,18 +1,11 @@
-# Requires a `Signed-off-by:` line on every commit a pull request adds.
+# Requires a `Signed-off-by:` line on commits submitted from an external repository.
 #
-# Why the DCO and not a CLA service: a CLA needs a hosted bot and an account on
-# it, and it would have to be installed before this repository is even public.
-# The DCO is the same evidence — a statement, attached to each commit, that the
-# contributor has the right to submit the code — carried inside the commit
-# itself, where it survives a fork, a mirror, and a move to another host.
+# This repository is the user's personal development fork. Pull requests between
+# branches in this same repository are personal development, not submissions to
+# the upstream KUAFUAI project, so the upstream contribution DCO is not required.
+# External contributors' pull requests remain subject to the DCO check below.
 #
-# It does not replace LICENSE A.2. The DCO records that a contributor *may*
-# submit this work; A.2 is what they *grant* by doing so. Both are wanted and
-# neither substitutes for the other — a sign-off with no licence to grant is
-# as useless as a licence grant from someone who had no right to make it.
-#
-# Merges are skipped. A merge commit has no content of its own, and demanding a
-# sign-off on one would fail every pull request that merged main into itself.
+# This check does not replace the upstream LICENSE A.2 contribution terms.
 name: dco
 
 on:
@@ -20,6 +13,8 @@ on:
 
 jobs:
   signed-off-by:
+    # Enforce DCO only when the PR head comes from a different repository.
+    if: github.event.pull_request.head.repo.full_name != github.event.pull_request.base.repo.full_name
     runs-on: ubuntu-latest
     steps:
       # Full history: the range below cannot be resolved from a shallow clone.
@@ -27,10 +22,19 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Every commit carries a Signed-off-by line
+      - name: Every external contribution commit carries a Signed-off-by line
         run: |
           base='${{ github.event.pull_request.base.sha }}'
           head='${{ github.event.pull_request.head.sha }}'
+          # Imported exact upstream v0.8.0 Git history is third-party history;
+          # preserve it unchanged rather than forging original contributor DCO.
+          # The exemption applies ONLY if that pinned release is an ancestor,
+          # and ONLY to commits reachable from that exact tag commit.
+          upstream_v080='df667e69a342d462ff0bb4593a73d84a9509d059'
+          exclusions=()
+          if git merge-base --is-ancestor "$upstream_v080" "$head"; then
+            exclusions+=("^$upstream_v080")
+          fi
           missing=0
           while read -r sha; do
             [ -z "$sha" ] && continue
@@ -39,7 +43,7 @@ jobs:
               echo "::error::$subject has no Signed-off-by line"
               missing=1
             fi
-          done < <(git rev-list --no-merges "$base..$head")
+          done < <(git rev-list --no-merges "$base..$head" "${exclusions[@]}")
 
           if [ "$missing" -ne 0 ]; then
             echo

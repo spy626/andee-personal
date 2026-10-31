@@ -39,6 +39,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 class BodyWsClient(
     private val url: String,
+    private val hubPublicKey: String,
     private val deviceId: String,
     private val deviceName: String,
     private val dispatcher: CommandDispatcher,
@@ -73,8 +74,20 @@ class BodyWsClient(
     private var backoffMs: Long = INITIAL_BACKOFF_MS
 
     fun start() {
+        // Do not rely solely on settings preflight: fail closed for any
+        // direct/future caller before creating a remote control connection.
+        if (!NetworkPolicy.isSecureHubUrl(url)) {
+            Log.w(TAG, "hub URL rejected: wss:// is required")
+            return
+        }
+        if (!HubIdentity.isValidPinnedKey(hubPublicKey)) {
+            Log.w(TAG, "hub refused: missing/invalid pinned signing key")
+            return
+        }
         if (!running.compareAndSet(false, true)) return
-        Log.i(TAG, "starting hub client → $url  (device=$deviceId '$deviceName')")
+        // The Hub URL can contain a high-entropy access capability in its path.
+        // Never write that URL or path to Android logs.
+        Log.i(TAG, "starting authenticated remote Hub client (device=$deviceId)")
         scheduleConnect(0)
     }
 
@@ -102,12 +115,15 @@ class BodyWsClient(
             conn = c
             c.connect()
         } catch (t: Throwable) {
-            Log.e(TAG, "connect failed: ${t.message}", t)
+            // A URI exception may embed the Hub bearer-capability path.
+            Log.e(TAG, "remote Hub connect failed (${t.javaClass.simpleName})")
             onDisconnected()
         }
     }
 
-    private fun onConnected() {
+    private fun onConnected(source: Inner) {
+        // Register and expose tools only after THIS socket proved its pinned identity.
+        if (conn !== source || !source.authenticated) return
         backoffMs = INITIAL_BACKOFF_MS  // reset backoff on success
         // forHub(), NOT all(): the five `note.*` notebook tools are localOnly.
         // The notebook holds what this person likes, what they promised, and
@@ -133,7 +149,7 @@ class BodyWsClient(
                     .put("device_name", deviceName)
                     .put("tools", tools)
             )
-        runCatching { conn?.send(register.toString()) }
+        runCatching { source.send(register.toString()) }
         Log.i(
             TAG,
             "registered as $deviceId with ${tools.length()} tools " +
@@ -149,7 +165,8 @@ class BodyWsClient(
         scheduleConnect(next)
     }
 
-    private fun handleRequest(req: JSONObject) {
+    private fun handleRequest(req: JSONObject, source: Inner) {
+        if (conn !== source || !source.authenticated) return
         val id = req.optString("id", "")
         val toolName = req.optString("method", "")
         val params = req.optJSONObject("params")
@@ -160,7 +177,24 @@ class BodyWsClient(
         val method = ToolSchemas.methodOf(toolName)
             ?: if (registry.hasMethod(toolName)) toolName else null
         if (method == null) {
-            respondError(id, "unknown tool: $toolName")
+            respondError(id, "unknown tool: $toolName", source)
+            return
+        }
+        // Extension schemas are dynamic: a signed Hub is still not the phone
+        // owner, and extension tools may control calls or external machines.
+        if (ToolSchemas.methodOf(toolName) == null) {
+            respondError(id, "remote Hub cannot invoke unclassified extension tool", source)
+            return
+        }
+        // Signed Hub identity verifies a server, NOT that the device owner
+        // issued every instruction. Label every remote request as untrusted;
+        // this blocks vault/peer/scene direct writes and dangerous direct
+        // actuation while preserving screen/card actions for original chat.
+        val forbidden = runCatching {
+            TurnGuards.check(method, silent = false, untrusted = true)
+        }.exceptionOrNull()
+        if (forbidden != null) {
+            respondError(id, forbidden.message ?: "remote action denied", source)
             return
         }
         // A request on *this* socket is the brain driving, which is what the
@@ -171,8 +205,13 @@ class BodyWsClient(
         // arrives first — but a model that opens with a tool call still counts.
         dispatcher.beginTask()
         worker.execute {
+            // A request queued on a defunct socket cannot cross into the new
+            // trusted Hub session.
+            if (conn !== source || !source.authenticated || !source.isOpen) return@execute
             val response = try {
-                val result = dispatcher.dispatch(method, params)
+                // Guard again at the final action boundary; no transport
+                // proof may relabel a remote Hub command as a live user turn.
+                val result = dispatcher.dispatch(method, params, untrusted = true)
                 JSONObject()
                     .put("type", "response")
                     .put("id", id)
@@ -184,7 +223,9 @@ class BodyWsClient(
                     .put("id", id)
                     .put("error", t.message ?: t.javaClass.simpleName)
             }
-            runCatching { conn?.send(response.toString()) }
+            if (conn === source && source.authenticated && source.isOpen) {
+                runCatching { source.send(response.toString()) }
+            }
         }
     }
 
@@ -195,7 +236,7 @@ class BodyWsClient(
      */
     fun sendEvent(kind: String, data: JSONObject) {
         val c = conn ?: return
-        if (!c.isOpen) return
+        if (!c.isOpen || !c.authenticated) return
         val envelope = JSONObject()
             .put("type", "event")
             .put("kind", kind)
@@ -204,12 +245,14 @@ class BodyWsClient(
         runCatching { c.send(envelope.toString()) }
     }
 
-    private fun respondError(id: String, msg: String) {
+    private fun respondError(id: String, msg: String, source: Inner) {
         val response = JSONObject()
             .put("type", "response")
             .put("id", id)
             .put("error", msg)
-        runCatching { conn?.send(response.toString()) }
+        if (conn === source && source.authenticated && source.isOpen) {
+            runCatching { source.send(response.toString()) }
+        }
     }
 
     /**
@@ -217,20 +260,69 @@ class BodyWsClient(
      * cleanly across reconnects.
      */
     private inner class Inner(uri: URI) : WebSocketClient(uri) {
+        // Fresh per-connection challenge; a captured proof cannot be replayed.
+        private val challenge = HubIdentity.newChallenge()
+        @Volatile var authenticated: Boolean = false
+            private set
 
         override fun onOpen(handshake: ServerHandshake?) {
-            Log.i(TAG, "onOpen ${uri}")
-            current = this@BodyWsClient
-            onConnected()
+            if (!running.get() || conn !== this) {
+                close(1008, "stale Hub socket")
+                return
+            }
+            val payload = JSONObject().put("type", "auth.challenge")
+                .put("data", JSONObject()
+                    .put("version", 1)
+                    .put("device_id", deviceId)
+                    .put("nonce", challenge))
+            try {
+                send(payload.toString())
+            } catch (t: Throwable) {
+                close(1008, "could not challenge Hub identity")
+                return
+            }
+            scheduler.schedule({
+                if (running.get() && conn === this && !authenticated) {
+                    close(1008, "Hub identity proof timed out")
+                }
+            }, AUTH_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         }
 
         override fun onMessage(message: String) {
-            val msg = runCatching { JSONObject(message) }.getOrNull() ?: return
+            if (!running.get() || conn !== this) return
+            if (message.length > MAX_HUB_FRAME_CHARS) {
+                close(1009, "Hub frame too large")
+                return
+            }
+            val msg = runCatching { JSONObject(message) }.getOrNull()
+            if (msg == null) {
+                if (!authenticated) close(1008, "invalid Hub proof frame")
+                return
+            }
+
+            if (!authenticated) {
+                val proof = msg.optJSONObject("data")
+                val valid = msg.optString("type") == "auth.proof" &&
+                    proof?.optInt("version") == 1 &&
+                    HubIdentity.verify(
+                        hubPublicKey,
+                        deviceId,
+                        challenge,
+                        proof?.optString("signature").orEmpty(),
+                    )
+                if (!valid) {
+                    Log.w(TAG, "Hub identity signature verification failed")
+                    close(1008, "untrusted Hub identity")
+                    return
+                }
+                authenticated = true
+                current = this@BodyWsClient
+                onConnected(this)
+                return
+            }
+
             when (msg.optString("type")) {
-                "request" -> handleRequest(msg)
-                // Narration and final answers arrive on the recv thread; both
-                // handlers only touch @Volatile UI state or post to the main
-                // Handler, so there's nothing to hand off to the worker here.
+                "request" -> handleRequest(msg, this)
                 "progress" -> msg.optString("content").takeIf { it.isNotBlank() }?.let(onProgress)
                 "message" -> msg.optString("content").takeIf { it.isNotBlank() }?.let(onFinal)
                 else -> Log.d(TAG, "ignoring type=${msg.optString("type")}")
@@ -238,14 +330,18 @@ class BodyWsClient(
         }
 
         override fun onClose(code: Int, reason: String?, remote: Boolean) {
-            Log.i(TAG, "onClose code=$code reason=$reason remote=$remote")
-            if (conn === this) conn = null
-            if (current === this@BodyWsClient) current = null
-            onDisconnected()
+            // Do not log server-provided reason: it may echo a secret URL path.
+            Log.i(TAG, "remote Hub disconnected code=$code remote=$remote")
+            if (conn === this) {
+                conn = null
+                if (current === this@BodyWsClient) current = null
+                onDisconnected()
+            }
         }
 
         override fun onError(ex: Exception?) {
-            Log.w(TAG, "onError ${ex?.message}")
+            // Network errors can contain full WebSocket URI credentials.
+            Log.w(TAG, "remote Hub error (${ex?.javaClass?.simpleName})")
         }
     }
 
@@ -253,6 +349,8 @@ class BodyWsClient(
         private const val TAG = "BodyWsClient"
         private const val INITIAL_BACKOFF_MS = 500L
         private const val MAX_BACKOFF_MS = 30_000L
+        private const val AUTH_TIMEOUT_SECONDS = 10L
+        private const val MAX_HUB_FRAME_CHARS = 262_144
 
         /**
          * The connected client, for services outside BodyCoreService's

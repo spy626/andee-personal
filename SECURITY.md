@@ -1,5 +1,45 @@
 # Security Policy
 
+## Personal-fork recovery transport branch: scoped changes only
+
+This document originally describes the upstream `main` security posture.
+In the separate, **unmerged** `recovery/phase1-network-transport` branch,
+the legacy WebSocket listener binds **127.0.0.1:9008** (not all LAN
+interfaces), rejects non-loopback peers, and remote Hub clients require
+`wss://` TLS URLs. Original local adb-forward and same-device integrations
+still have their socket entry point.
+
+**Do not interpret these constraints as full security.** Any locally installed
+Android app may still reach the unauthenticated loopback port and request
+device actions. A remote WSS hub is not cryptographically authorized by an
+application-level pairing mechanism. Untrusted screen/notification prompt
+injection and sensitive tool use are also unresolved in this branch.
+The old sections below document the upstream starting threat model, not a
+claim that all vulnerabilities have been repaired.
+
+**This branch is not yet approved for installation on a daily-use phone.**
+
+### Phase 2 note: owner-approved local socket connections (unmerged draft)
+
+The stacked `recovery/phase2-local-connection-consent` branch now gates every
+loopback WebSocket connection (including passive viewers and call extensions)
+on a physical, unlocked-phone **Allow** button. Pending clients receive no
+broadcasts and cannot dispatch tools or register an extension before this
+approval. Approval only lasts for the single live TCP/WebSocket connection;
+reconnects require a new approval. Deny, voice, timeout, hidden/locked
+device, existing card or active task fail closed. A busy consent dialog and
+recent denials are throttled. This preserves the original local command frame
+and extension registration formats; no SMS, WhatsApp, voice or mascot runtime
+features were modified.
+
+**This is NOT cryptographic identity verification.** An arbitrary local app
+can still request a pairing prompt, the phone cannot reliably identify its
+true application UID from a loopback TCP socket, and the owner may be tricked
+into consenting. Physical Android acceptance and owner-authorized remote Hub
+pairing are still pending. Do not deploy on a primary device.
+
+
+
 This project runs as an accessibility service that can read the screen, perform
 gestures, and act on the user's behalf across every app. That makes it a
 high-value target, and it means "the app can read my screen" is the intended
@@ -194,3 +234,48 @@ crediting the reporter.
 
 Fixes may ship in a normal release. Users are encouraged to track the default
 branch or the latest release rather than running an old build.
+
+## Remote signed-Hub identity hardening (recovery Phase 3 draft)
+
+On `recovery/phase3-signed-hub-identity` the remote WSS Hub must prove
+possession of an owner-pinned P-256 private signing key by answering a
+fresh 32-byte challenge, tied to this phone's device ID. No Hub tool
+schemas, local event payloads, requests, progress text or final answers
+are processed before authentication. Invalid/missing signing keys and
+missing/invalid/late proof fail closed. A new challenge is required for
+every reconnect; changing/clearing the pin in Settings revokes trust
+when the service restarts. The signing private key stays on the Hub.
+
+**Compatibility and security limits:** Existing remote Hub servers without
+the signed-identity protocol will not connect until the Hub owner adds the
+adapter documented in `docs/HUB_SIGNED_IDENTITY_PROTOCOL.md`. The default
+local AI, original SMS/WhatsApp, voice, blue mascot and local peer features
+remain unchanged. This is manually pinned authentication, not automatic
+QR pairing or a new phone-to-phone remote-control feature. A trusted but
+compromised Hub can still issue commands; prompt-injection and sensitive
+per-action owner authorization remain unresolved. **NOT MAIN-PHONE-READY.**
+
+## Recovery Phase 6: notification and remote Hub sensitive-action provenance
+
+The unmerged Phase 6 branch blocks **direct** SMS sending, phone dialing,
+calendar modification, permission escalation requests, external URL opens,
+alarm changes and physical robot movement from turns whose subject matter
+is untrusted. Remote Hub commands are also labeled untrusted on both
+network ingress and their final dispatcher call, even after successful
+signed Hub identity verification. Local owner-initiated SMS/call workflows
+are unchanged.
+
+This is intentionally a small control, not a full prompt-injection fix.
+Notification WhatsApp workflows still require `screen.*` and `ui.ask`,
+and those remain allowed; a malicious message could try to make
+screen-control click an irreversible button indirectly. Unknown
+extension tool methods can also have side effects. An authenticated Hub
+still sees screen/tool information and may exercise allowed screen actions.
+A secure, real-device-aware UI action authorization layer remains a blocker
+for primary-phone release.
+
+## Phase 7 (draft): live untrusted screen boundary / dynamic extension isolation
+
+Only authenticated owner-initiated **local** turns retain unrestricted screen gestures and extension tools. Notification and remote Hub commands have a live active Accessibility-package screen-action guard limited to WhatsApp, WhatsApp Business and WeChat. No stale page dump or model-supplied package is trusted for this decision, and untrusted app labels map to fixed package IDs. Missing/unknown foreground, settings/payment apps, and untrusted dynamic extension method forwarding all fail closed. The original local connection protocol, WhatsApp notification cards, SMS sender, local AI, voice and mascot are not redesigned.
+
+**Residual risk remains high:** a malicious untrusted message can still convince the assistant to press **Send/Call/Approve** inside a supported messaging app, and UI focus can change after the package check. Remote signed Hub messages and local peer-connection consent are not proof of per-action owner intent. This recovery branch remains **not approved for any daily-use primary phone**; future work needs target-level authorization and real isolated-device acceptance.
