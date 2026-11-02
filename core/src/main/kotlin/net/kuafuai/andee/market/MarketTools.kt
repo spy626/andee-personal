@@ -14,11 +14,10 @@ import java.util.concurrent.TimeUnit
  * in core: the phone (`AndroidBrainHost`) and the Mac (`DesktopBrainHost`) list [tools] and route
  * [hasMethod] here, and neither adds anything of its own.
  *
- * **Only exists in CodeFlying mode.** [enabled] is wired from `BrainConfig.mode`;
- * when it is false [tools] returns an empty array and [hasMethod] says no, so a
- * local or hub brain is byte-for-byte what it was before this class existed.
- * That is deliberate: the market is a CodeFlying capability, and the other two
- * backends answer to a different server (or none).
+ * **Independent of the chat provider.** [enabled] is true only when the
+ * CodeFlying-backed market host and its own key are configured. It must never
+ * receive the xKiro chat credential. When disabled [tools] is empty and
+ * [hasMethod] says no, so the existing local tool surface stays unchanged.
  *
  * **Two tools, not the whole market.** The market holds hundreds of HTTP APIs and
  * grows. Handing the model every one of them is the context-blowout that tool

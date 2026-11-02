@@ -84,6 +84,7 @@ class LocalBrain(
         model = cfg.model,
         thinking = cfg.thinking,
         reasoningEffort = cfg.reasoningEffort,
+        xKiroMode = cfg.mode == BrainConfig.BRAIN_XKIRO,
     )
 
     /**
@@ -614,9 +615,14 @@ class LocalBrain(
      * exactly like the ball going quiet. Anything unrecognised falls back to
      * the old generic line with the raw message, so nothing is hidden.
      */
-    /** The sentence for "no key": the CodeFlying one says where to get it. */
-    private fun noKeyText(): String =
-        host.text(if (cfg.mode == BrainConfig.BRAIN_CODEFLYING) BrainText.NO_KEY_CODEFLYING else BrainText.NO_KEY)
+    /** Provider-specific setup guidance when the selected chat key is missing. */
+    private fun noKeyText(): String = host.text(
+        when (cfg.mode) {
+            BrainConfig.BRAIN_XKIRO -> BrainText.NO_KEY_XKIRO
+            BrainConfig.BRAIN_CODEFLYING -> BrainText.NO_KEY_CODEFLYING
+            else -> BrainText.NO_KEY
+        }
+    )
 
     private fun explainFailure(t: Throwable): String {
         fun s(id: BrainText, vararg args: Any) = host.text(id, *args)

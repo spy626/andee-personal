@@ -45,8 +45,9 @@ object VoiceConfig {
          */
         internal val OVERRIDE_KEYS = setOf(
             "api_key", "asr_endpoint", "tts_endpoint",
-            // Blank goes back to the key the build carries.
-            "codeflying_key",
+            // Separate user-entered credentials for chat and MarketTools.
+            "codeflying_key", "market_api_key", "xkiro_api_key", "xkiro_model",
+            "xkiro_thinking", "xkiro_reasoning_effort",
             // The Google rows all have a real value to fall back to — the
             // build's, or the constant — so an empty box means "use that",
             // which is the only way back to a baked-in key.
@@ -174,14 +175,18 @@ object VoiceConfig {
          * URL that has ever been saved cannot be cleared from the UI, and
          * inferring the mode from it would leave the user with no way back.
          *
-         * [BRAIN_CODEFLYING] is a hosted backend that proxies the LLM, ASR
-         * and TTS from one domain. In this mode every endpoint and credential
-         * is derived from `BuildConfig.CODEFLYING_*` and the user does not
-         * fill in any voice / LLM fields.
+         * [BRAIN_XKIRO] is chat-only: its API endpoint is fixed internally,
+         * and its key/model ID are user settings. LocalBrain and phone tools
+         * still run on-device; ASR/TTS remain separate voice providers.
+         * [BRAIN_CODEFLYING] is retained only for legacy compatibility.
          */
         const val BRAIN_HUB = net.kuafuai.andee.config.BrainConfig.BRAIN_HUB
         const val BRAIN_LOCAL = net.kuafuai.andee.config.BrainConfig.BRAIN_LOCAL
         const val BRAIN_CODEFLYING = net.kuafuai.andee.config.BrainConfig.BRAIN_CODEFLYING
+        const val BRAIN_XKIRO = net.kuafuai.andee.config.BrainConfig.BRAIN_XKIRO
+
+        /** Fixed xKiro API origin; no user-editable endpoint setting. */
+        const val XKIRO_BASE_URL = "https://api.xkiro.com/v1"
 
         const val DEFAULT_LLM_BASE_URL = "https://api.deepseek.com"
         const val DEFAULT_LLM_MODEL = "deepseek-flash"
@@ -199,10 +204,8 @@ object VoiceConfig {
          * them — that is the whole point of tying these to the language rather
          * than to the build.
          *
-         * **CodeFlying is deliberately not switched by language.** Its model is
-         * whatever the hosted backend serves; an English build inventing
-         * `gpt-4o-mini` at that endpoint would name a model CodeFlying does not
-         * have. See [brainConfig].
+         * xKiro's model ID is a separate user setting; the language-dependent
+         * defaults below apply only to the 本机 backend.
          */
         const val DEFAULT_LLM_BASE_URL_EN = "https://api.openai.com/v1"
         const val DEFAULT_LLM_MODEL_EN = "gpt-4o-mini"
@@ -216,9 +219,8 @@ object VoiceConfig {
             if (uiLanguage(context) == LANG_EN) DEFAULT_LLM_MODEL_EN else DEFAULT_LLM_MODEL
 
         /**
-         * The CodeFlying server, from the build's `CODEFLYING_DOMAIN`. There is no
-         * "available" switch: CodeFlying is always a choice and the default one, and
-         * a build packaged without a domain simply has nowhere to send it yet.
+         * The CodeFlying host used by the separate MarketTools service. A build
+         * without a domain has no MarketTools endpoint, regardless of chat mode.
          */
         fun codeFlyingEndpoint(@Suppress("UNUSED_PARAMETER") context: Context): net.kuafuai.andee.config.CodeFlyingEndpoint? =
             net.kuafuai.andee.config.CodeFlyingEndpoint.parse(
@@ -226,24 +228,23 @@ object VoiceConfig {
             )
 
         /**
-         * The CodeFlying API key in effect for this install.
-         *
-         * A key the user typed (`codeflying_key`) wins. Otherwise
-         * `assets/andee_key.txt`: production APKs are built once from shared
-         * source (empty key) and the per-user `kft_` token is written into that
-         * asset at package time. Dev builds fall back to
-         * [BuildConfig.CODEFLYING_KEY] from local.properties.
+         * Separate credential for CodeFlying-backed MarketTools. Existing
+         * user-entered `codeflying_key` preferences are migrated once; this
+         * method never reads a credential from an asset or BuildConfig.
          */
-        fun codeFlyingKey(context: Context): String =
-            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .getString("codeflying_key", "").orEmpty().trim()
-                .ifEmpty { codeFlyingBuiltInKey(context) }
+        fun marketApiKey(context: Context): String {
+            val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val saved = p.getString("market_api_key", null)
+            if (saved != null) return saved.trim()
+            val legacy = p.getString("codeflying_key", "").orEmpty().trim()
+            if (legacy.isNotEmpty()) {
+                p.edit().putString("market_api_key", legacy).remove("codeflying_key").apply()
+            }
+            return legacy
+        }
 
-        /** The key that came with the APK, ignoring anything typed. */
-        fun codeFlyingBuiltInKey(context: Context): String =
-            runCatching {
-                context.assets.open("andee_key.txt").bufferedReader().use { it.readText().trim() }
-            }.getOrDefault("").ifEmpty { BuildConfig.CODEFLYING_KEY }
+        /** Legacy callers now resolve only the independent MarketTools key. */
+        fun codeFlyingKey(context: Context): String = marketApiKey(context)
 
         /** Origin for the market tools; see [net.kuafuai.andee.config.CodeFlyingEndpoint.marketBaseUrl]. */
         fun codeFlyingMarketBaseUrl(context: Context): String =
@@ -336,10 +337,9 @@ object VoiceConfig {
         // Nested name kept so existing callers and the settings card read unchanged.
 
         /**
-         * The brain mode in effect, with CodeFlying availability already
-         * reconciled. Reads the saved `brain` pref; falls back to CodeFlying
-         * if the build enables it and otherwise to local. Unknown saved values
-         * fail closed to local — same rule as [groundingEnabled].
+         * The brain mode in effect. Previously saved CodeFlying and blank
+         * preferences are migrated to xKiro chat; explicit Local and Hub choices
+         * are preserved. Unknown saved values fail closed to local.
          */
         fun brainMode(context: Context): String {
             val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -352,22 +352,19 @@ object VoiceConfig {
          *
          * Split out because the settings card has to ask about the second
          * kind. The brain picker does not write on tap, so when the user
-         * selects 本机 out of CodeFlying the card is holding a value no pref
-         * reflects yet, and asking [brainMode] there answers about the mode
-         * being left — which is how the voice block came to stay hidden until
-         * 保存 rebuilt the card.
+         * selects another backend the card is holding a value no preference
+         * reflects yet. This helper lets visibility follow that pending choice.
          *
-         * **One rule, one place.** A second copy of "is CodeFlying really in
-         * play" is how a build that does not enable it ends up hiding the very
-         * voice settings it is reading from.
+         * **One rule, one place.** A second copy of the mode migration rule
+         * could make the visible settings disagree with the backend actually used.
          */
         fun resolveBrainMode(context: Context, raw: String?): String {
             val saved = raw?.trim()?.lowercase().orEmpty()
             return when (saved) {
                 BRAIN_HUB -> BRAIN_HUB
                 BRAIN_LOCAL -> BRAIN_LOCAL
-                BRAIN_CODEFLYING -> BRAIN_CODEFLYING
-                "" -> BRAIN_CODEFLYING
+                // Saved CodeFlying installs migrate to xKiro for chat.
+                BRAIN_CODEFLYING, BRAIN_XKIRO, "" -> BRAIN_XKIRO
                 else -> BRAIN_LOCAL
             }
         }
@@ -375,10 +372,22 @@ object VoiceConfig {
         fun brainConfig(context: Context): BrainConfig {
             val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             val mode = brainMode(context)
-            // CodeFlying derives everything from the build — the user does not
-            // see or edit the endpoints. llm_model / thinking / effort are
-            // deliberately *still* read from prefs so the same picker in
-            // [SettingsUi] applies to both local and CodeFlying.
+            // xKiro handles chat only. The endpoint is fixed internally and
+            // the user enters a separate API key and full vendor/model ID.
+            if (mode == BRAIN_XKIRO) {
+                return BrainConfig(
+                    mode = BRAIN_XKIRO,
+                    apiKey = p.getString("xkiro_api_key", "").orEmpty().trim(),
+                    baseUrl = XKIRO_BASE_URL,
+                    model = p.getString("xkiro_model", "").orEmpty().trim(),
+                    thinking = p.getString("xkiro_thinking", defaultThinking())
+                        ?.trim()?.lowercase() != "disabled",
+                    reasoningEffort = p.getString("xkiro_reasoning_effort", DEFAULT_REASONING_EFFORT)
+                        .orEmpty().trim().ifEmpty { DEFAULT_REASONING_EFFORT },
+                )
+            }
+            // Legacy direct callers retain the old configuration shape, but
+            // their credential is still resolved only from MarketTools prefs.
             if (mode == BRAIN_CODEFLYING) {
                 return BrainConfig(
                     mode = BRAIN_CODEFLYING,
@@ -637,10 +646,6 @@ object VoiceConfig {
                 // override once saved could never be taken out.
                 // The card shows the key in effect, so saving it back unchanged must not
                 // pin the build's key as a user override: store only a different one.
-                if (k == "codeflying_key" && v.trim() == codeFlyingBuiltInKey(context)) {
-                    p.remove(k)
-                    continue
-                }
                 if (k in OVERRIDE_KEYS) {
                     if (v.isBlank()) p.remove(k) else p.putString(k, v.trim())
                     continue
@@ -660,7 +665,6 @@ object VoiceConfig {
         fun current(context: Context): Map<String, String> {
             val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             val hc = hubConfig(context)
-            val bc = brainConfig(context)
             return mapOf(
                 // The overridable credential shows what is *saved*, not what is
                 // in effect: an empty box is how the screen says "the factory
@@ -669,7 +673,14 @@ object VoiceConfig {
                 // overridable from local.properties now, so the settings card
                 // must show saved-or-empty rather than saved-or-default.
                 "api_key" to p.getString("api_key", "").orEmpty(),
-                "codeflying_key" to codeFlyingKey(context),
+                "market_api_key" to marketApiKey(context),
+                "xkiro_api_key" to p.getString("xkiro_api_key", "").orEmpty(),
+                "xkiro_model" to p.getString("xkiro_model", "").orEmpty(),
+                "xkiro_thinking" to p.getString("xkiro_thinking", defaultThinking())
+                    .orEmpty().trim().lowercase().let { if (it == "disabled") "disabled" else "enabled" },
+                "xkiro_reasoning_effort" to p.getString(
+                    "xkiro_reasoning_effort", DEFAULT_REASONING_EFFORT,
+                ).orEmpty().trim().ifEmpty { DEFAULT_REASONING_EFFORT },
                 "asr_endpoint" to p.getString("asr_endpoint", "").orEmpty(),
                 "asr_resource_id" to p.getString("asr_resource_id", DEFAULT_ASR_RESOURCE)!!,
                 "uid" to p.getString("uid", "").orEmpty(),
@@ -693,19 +704,14 @@ object VoiceConfig {
                 "hub_url" to hc.url,
                 "device_id" to hc.deviceId,
                 "device_name" to hc.deviceName,
-                // What the card selects: nothing saved is CodeFlying (the default tab for a
-                // new install), whether or not this build can run it — the tab then says so.
-                // Not bc.mode, which has CodeFlying already resolved away to local.
-                "brain" to p.getString("brain", "").orEmpty().trim().lowercase().ifEmpty { BRAIN_CODEFLYING },
+                // Report the normalized saved choice. Blank/legacy CodeFlying
+                // preferences now select xKiro, the default chat tab.
+                "brain" to brainMode(context),
                 "show_hub" to if (showHub(context)) "on" else "off",
-                // llm_api_key / llm_base_url / llm_model are the 本机 tab's rows —
-                // the user's own credentials and the endpoint they point at.
-                // They stay visible no matter which backend is active, because
-                // switching to CodeFlying and back must not look like the
-                // local-tab fields were wiped. The compiled CodeFlying key never
-                // flows through these prefs; it comes from BuildConfig at
-                // [brainConfig] time, so showing the saved values here cannot
-                // leak it.
+                // llm_api_key / llm_base_url / llm_model belong to the 本机 tab.
+                // xKiro credentials and model ID have separate keys above, and
+                // MarketTools has its own credential. Switching chat providers
+                // must not overwrite any of these saved values.
                 //
                 // All three show saved-or-empty, never the resolved value. The
                 // empty box is how the row says "the default is in use", and it
@@ -720,8 +726,11 @@ object VoiceConfig {
                 // Round-tripped as the wire words rather than a boolean: this map
                 // feeds SettingsUi's pickers and the picker's value is what comes
                 // back to [save], which only speaks String.
-                "llm_thinking" to if (bc.thinking) "enabled" else "disabled",
-                "llm_reasoning_effort" to bc.reasoningEffort,
+                "llm_thinking" to p.getString("llm_thinking", defaultThinking())
+                    .orEmpty().trim().lowercase().let { if (it == "disabled") "disabled" else "enabled" },
+                "llm_reasoning_effort" to p.getString(
+                    "llm_reasoning_effort", DEFAULT_REASONING_EFFORT,
+                ).orEmpty().trim().ifEmpty { DEFAULT_REASONING_EFFORT },
                 "grounding" to p.getString("grounding", "off")!!,
                 "notify" to notifyScope(context),
                 "nudge" to nudgeLevel(context),
@@ -989,7 +998,8 @@ object VoiceConfig {
             "theme",
             "uid",
             "api_key",
-            "codeflying_key",
+            "codeflying_key", "market_api_key", "xkiro_api_key", "xkiro_model",
+            "xkiro_thinking", "xkiro_reasoning_effort",
             "asr_endpoint", "asr_resource_id",
             "tts_endpoint", "tts_resource_id", "tts_sample_rate",
             "voice_provider", "speak_provider",

@@ -49,12 +49,13 @@ import java.util.concurrent.TimeUnit
  * [onCommand] returns a JSON-serializable value (usually JSONObject) or throws.
  * Thrown exceptions become error responses; nothing else propagates.
  *
- * Binding to 0.0.0.0 by default so the brain running on another host on the
- * LAN can reach it. Loopback-only is also fine when driven via adb forward.
+ * Bind to loopback by default. This keeps unauthenticated LAN peers from
+ * reaching the command socket; use adb forward for local development. Remote
+ * brain and call-extension access must wait for authenticated pairing.
  */
 class BodyWsServer(
     port: Int,
-    bindHost: String = "0.0.0.0",
+    bindHost: String = "127.0.0.1",
     private val registry: CallExtensionRegistry,
     /** Extension-pushed event; the service turns these into hub broadcasts + UI updates. */
     private val onExtensionEvent: (kind: String, data: JSONObject) -> Unit = { _, _ -> },
