@@ -587,20 +587,12 @@ class SettingsUi(
      * ever in play, and the picker folds away the two that are not.
      *
      * Visibility rules:
-     *  * **CodeFlying** is only in the picker when the build enables it with a
-     *    non-empty domain (the build's CODEFLYING_DOMAIN). The tab
-     *    itself has no editable rows — endpoints and credential are compiled
-     *    in — just a note describing what the hosted backend offers.
-     *  * **云端** is only in the picker when the user has turned the "显示
-     *    云端选项" toggle on (`show_hub`, saved eagerly so the picker rebuilds
-     *    at once). It is off by default: a device nobody has configured for a
-     *    hub is better off not seeing an option it has nothing to fill in.
+     *  * **xKiro** and **本机** are always available. xKiro exposes its API key
+     *    and full vendor/model ID; its API endpoint is fixed internally.
+     *  * **云端** appears only after the user enables `show_hub`.
      *
-     * Voice (`asr_endpoint` / `tts_endpoint` / `api_key` and the resource IDs)
-     * used to live inside 高级 → 火山. It now lives inside the **本机** tab,
-     * because voice runs on this device whichever backend answers, but a
-     * CodeFlying device never touches these fields and a 云端 device cares
-     * about hub plumbing instead.
+     * Chat and voice are separate choices. Volcengine/Google ASR and TTS remain
+     * selectable regardless of whether xKiro or the on-device model answers.
      */
     private fun brainSection(form: LinearLayout) {
         val panel = group(
@@ -619,9 +611,8 @@ class SettingsUi(
             }
         }
         var applyMode: ((String, Boolean) -> Unit)? = null
-        // Filled in by the picker itself: the "no key?" line below has to move the
-        // tab the same way a tap on the cell would, or the card would keep showing
-        // 本机 while saving CodeFlying.
+        // The no-key link below selects xKiro through the same picker path as a
+        // direct tap, without saving until the user confirms the settings.
         var pickBrain: (String) -> Unit = {}
         val mode = segmented(panel, "brain", options, setterRef = { pickBrain = it }) { applyMode?.invoke(it, true) }
 
