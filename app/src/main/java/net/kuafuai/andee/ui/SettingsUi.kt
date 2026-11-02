@@ -664,14 +664,14 @@ class SettingsUi(
         var applyXkiroThinking: ((String, Boolean) -> Unit)? = null
         val xkiroThinking = segmented(
             xkiroBlock,
-            "llm_thinking",
+            "xkiro_thinking",
             listOf("enabled" to lctx.getString(R.string.common_on), "disabled" to lctx.getString(R.string.common_off)),
         ) { applyXkiroThinking?.invoke(it, true) }
         val xkiroEffortBlock = block(xkiroBlock)
         rowLabel(xkiroEffortBlock, lctx.getString(R.string.settings_llm_effort))
         segmented(
             xkiroEffortBlock,
-            "llm_reasoning_effort",
+            "xkiro_reasoning_effort",
             listOf(
                 "high" to lctx.getString(R.string.common_high),
                 "medium" to lctx.getString(R.string.common_medium),

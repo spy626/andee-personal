@@ -47,6 +47,7 @@ object VoiceConfig {
             "api_key", "asr_endpoint", "tts_endpoint",
             // Separate user-entered credentials for chat and MarketTools.
             "codeflying_key", "market_api_key", "xkiro_api_key", "xkiro_model",
+            "xkiro_thinking", "xkiro_reasoning_effort",
             // The Google rows all have a real value to fall back to — the
             // build's, or the constant — so an empty box means "use that",
             // which is the only way back to a baked-in key.
@@ -379,9 +380,9 @@ object VoiceConfig {
                     apiKey = p.getString("xkiro_api_key", "").orEmpty().trim(),
                     baseUrl = XKIRO_BASE_URL,
                     model = p.getString("xkiro_model", "").orEmpty().trim(),
-                    thinking = p.getString("llm_thinking", defaultThinking())
+                    thinking = p.getString("xkiro_thinking", defaultThinking())
                         ?.trim()?.lowercase() != "disabled",
-                    reasoningEffort = p.getString("llm_reasoning_effort", DEFAULT_REASONING_EFFORT)
+                    reasoningEffort = p.getString("xkiro_reasoning_effort", DEFAULT_REASONING_EFFORT)
                         .orEmpty().trim().ifEmpty { DEFAULT_REASONING_EFFORT },
                 )
             }
@@ -664,7 +665,6 @@ object VoiceConfig {
         fun current(context: Context): Map<String, String> {
             val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             val hc = hubConfig(context)
-            val bc = brainConfig(context)
             return mapOf(
                 // The overridable credential shows what is *saved*, not what is
                 // in effect: an empty box is how the screen says "the factory
@@ -676,6 +676,11 @@ object VoiceConfig {
                 "market_api_key" to marketApiKey(context),
                 "xkiro_api_key" to p.getString("xkiro_api_key", "").orEmpty(),
                 "xkiro_model" to p.getString("xkiro_model", "").orEmpty(),
+                "xkiro_thinking" to p.getString("xkiro_thinking", defaultThinking())
+                    .orEmpty().trim().lowercase().let { if (it == "disabled") "disabled" else "enabled" },
+                "xkiro_reasoning_effort" to p.getString(
+                    "xkiro_reasoning_effort", DEFAULT_REASONING_EFFORT,
+                ).orEmpty().trim().ifEmpty { DEFAULT_REASONING_EFFORT },
                 "asr_endpoint" to p.getString("asr_endpoint", "").orEmpty(),
                 "asr_resource_id" to p.getString("asr_resource_id", DEFAULT_ASR_RESOURCE)!!,
                 "uid" to p.getString("uid", "").orEmpty(),
@@ -721,8 +726,11 @@ object VoiceConfig {
                 // Round-tripped as the wire words rather than a boolean: this map
                 // feeds SettingsUi's pickers and the picker's value is what comes
                 // back to [save], which only speaks String.
-                "llm_thinking" to if (bc.thinking) "enabled" else "disabled",
-                "llm_reasoning_effort" to bc.reasoningEffort,
+                "llm_thinking" to p.getString("llm_thinking", defaultThinking())
+                    .orEmpty().trim().lowercase().let { if (it == "disabled") "disabled" else "enabled" },
+                "llm_reasoning_effort" to p.getString(
+                    "llm_reasoning_effort", DEFAULT_REASONING_EFFORT,
+                ).orEmpty().trim().ifEmpty { DEFAULT_REASONING_EFFORT },
                 "grounding" to p.getString("grounding", "off")!!,
                 "notify" to notifyScope(context),
                 "nudge" to nudgeLevel(context),
@@ -991,6 +999,7 @@ object VoiceConfig {
             "uid",
             "api_key",
             "codeflying_key", "market_api_key", "xkiro_api_key", "xkiro_model",
+            "xkiro_thinking", "xkiro_reasoning_effort",
             "asr_endpoint", "asr_resource_id",
             "tts_endpoint", "tts_resource_id", "tts_sample_rate",
             "voice_provider", "speak_provider",
