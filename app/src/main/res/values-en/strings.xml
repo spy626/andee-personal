@@ -79,6 +79,8 @@
     <string name="settings_xkiro_model">xKiro model ID</string>
     <string name="settings_xkiro_model_hint">Full vendor/model ID; choose a model marked free in the catalog</string>
     <string name="settings_xkiro_models_link">Browse xKiro model catalog ›</string>
+    <string name="settings_xkiro_effort_xhigh">Extra high</string>
+    <string name="settings_xkiro_effort_max">Maximum</string>
     <string name="xkiro_models_url" translatable="false">https://docs.xkiro.com/api/list-models</string>
     <string name="settings_market_tools_note">MarketTools is a separate CodeFlying-backed service, not part of xKiro chat. It uses its own key and is available only when this build has the market host configured. Some market actions may incur charges.</string>
     <string name="settings_market_api_key">MarketTools API key (separate)</string>

@@ -56,6 +56,8 @@
     <string name="settings_xkiro_model">xKiro 模型 ID</string>
     <string name="settings_xkiro_model_hint">完整 vendor/model ID；请在目录中选择标记为 free 的模型</string>
     <string name="settings_xkiro_models_link">浏览 xKiro 模型目录 ›</string>
+    <string name="settings_xkiro_effort_xhigh">超高</string>
+    <string name="settings_xkiro_effort_max">最高</string>
     <string name="xkiro_models_url" translatable="false">https://docs.xkiro.com/api/list-models</string>
     <string name="settings_market_tools_note">MarketTools 是独立的 CodeFlying 服务，并不属于 xKiro 聊天。它使用单独的密钥；只有此版本配置了 market host 时才可用。部分市场操作可能产生费用。</string>
     <string name="settings_market_api_key">MarketTools API 密钥（独立）</string>

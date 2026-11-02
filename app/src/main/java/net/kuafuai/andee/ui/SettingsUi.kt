@@ -664,6 +664,8 @@ class SettingsUi(
             xkiroEffortBlock,
             "xkiro_reasoning_effort",
             listOf(
+                "max" to lctx.getString(R.string.settings_xkiro_effort_max),
+                "xhigh" to lctx.getString(R.string.settings_xkiro_effort_xhigh),
                 "high" to lctx.getString(R.string.common_high),
                 "medium" to lctx.getString(R.string.common_medium),
                 "low" to lctx.getString(R.string.common_low),
