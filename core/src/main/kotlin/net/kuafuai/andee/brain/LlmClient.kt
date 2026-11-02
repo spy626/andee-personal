@@ -104,7 +104,9 @@ class LlmClient(
         .followRedirects(false)
         .followSslRedirects(false)
         .connectTimeout(15, TimeUnit.SECONDS)
-        // xKiro caps non-streaming requests at 95 seconds; keep headroom.
+        // xKiro caps non-streaming requests at 95 seconds. Bound the entire
+        // call, not only socket read inactivity, and keep 5 seconds of headroom.
+        .callTimeout(if (xKiroMode) 90 else 0, TimeUnit.SECONDS)
         .readTimeout(if (xKiroMode) 90 else 180, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
