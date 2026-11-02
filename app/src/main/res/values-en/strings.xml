@@ -72,6 +72,18 @@
     <string name="settings_brain_cloud">Cloud</string>
     <string name="settings_brain_local">On-device</string>
     <string name="settings_brain_codeflying">CodeFlying</string>
+    <string name="settings_brain_xkiro">xKiro</string>
+    <string name="settings_brain_xkiro_note">xKiro handles online chat and LLM requests only. Andee's LocalBrain agent loop and phone tools continue to run on this device. Choose a model marked free in the catalog; free-tier daily tokens and access limits depend on your xKiro account.</string>
+    <string name="settings_xkiro_api_key">xKiro API key</string>
+    <string name="settings_xkiro_api_key_hint">Paste your xKiro API key</string>
+    <string name="settings_xkiro_model">xKiro model ID</string>
+    <string name="settings_xkiro_model_hint">Full vendor/model ID; choose a model marked free in the catalog</string>
+    <string name="settings_xkiro_models_link">Browse xKiro model catalog ›</string>
+    <string name="xkiro_models_url" translatable="false">https://docs.xkiro.com/api/list-models</string>
+    <string name="settings_market_tools_note">MarketTools is a separate CodeFlying-backed service, not part of xKiro chat. It uses its own key and is available only when this build has the market host configured. Some market actions may incur charges.</string>
+    <string name="settings_market_api_key">MarketTools API key (separate)</string>
+    <string name="settings_market_tools_get_key">Get a MarketTools key ›</string>
+    <string name="settings_no_key_use_xkiro">No chat key? Switch to xKiro settings</string>
     <string name="settings_show_hub">Show cloud option</string>
     <string name="settings_show_hub_note">Adds a Cloud backend tab for connecting to a hub you host yourself.</string>
     <string name="settings_brain_codeflying_note">CodeFlying (CodeFlying.app): models and voice come set up for you; add your key and it works. You can also tap into a long list of third-party services — AI image, video and music generation, location, weather, PDF conversion, search, news, stocks and more. CodeFlying wraps and bills all of them in one place, so you never have to sign up with each provider or juggle their keys and invoices.\n\nNote: using CodeFlying backend services may incur charges.</string>
@@ -92,7 +104,7 @@
     <string name="common_high">High</string>
     <string name="common_medium">Medium</string>
     <string name="common_low">Low</string>
-    <string name="settings_brain_local_note">The device runs the agent loop itself, with no hub. Without a key it will not take over.</string>
+    <string name="settings_brain_local_note">The agent loop and phone tools run on this device; model requests go to the online endpoint you configure. Without a key it will not take over.</string>
     <string name="settings_codeflying_get_key">No key? Sign up at the link below, then paste your key into the box underneath. New users get free credit.</string>
     <string name="settings_codeflying_open_site">Open CodeFlying.app ›</string>
     <string name="codeflying_url" translatable="false">https://www.codeflying.app/andee</string>
@@ -462,6 +474,7 @@
     <string name="svc_no_brain_hub">No brain is connected yet, so I can\'t speak.</string>
     <string name="svc_no_brain_local">The local brain has no key yet, so I can\'t speak.</string>
     <string name="svc_no_brain_codeflying">There is no CodeFlying key yet, so I can\'t speak.</string>
+    <string name="svc_no_brain_xkiro">There is no xKiro API key yet. Add it under Settings → Backend → xKiro.</string>
     <string name="svc_btn_get_key">Get a key</string>
 
     <string name="notebook_dump_header">"Notebook · %1$d memories\n"</string>
@@ -594,6 +607,7 @@
     <!-- LocalBrain — display half only; see the comment on the Chinese side. -->
     <string name="brain_no_key">The on-device brain has no API key yet. Long-press the ball to bring the card back, tap ⚙ in the control bar, and put the key in Backend → On-device → “DeepSeek Key”.</string>
     <string name="brain_no_key_codeflying">There is no CodeFlying key yet. Long-press the ball to bring the card back, tap ⚙, and paste the key under Backend → CodeFlying. No key? Get one at CodeFlying.app.</string>
+    <string name="brain_no_key_xkiro">There is no xKiro API key yet. Long-press the ball, open Settings → Backend → xKiro, and enter your xKiro key.</string>
     <string name="brain_error">Something broke on my side: %1$s</string>
     <string name="brain_error_402">The backend answered 402, which most likely means the account is out of balance. Open Settings → Backend to see which provider you are using, then top up on that provider\'s website and try again.</string>
     <string name="brain_error_auth">The backend refused the request (HTTP %1$d): the key is wrong, expired or disabled. Check the key in Settings → Backend, and generate a new one on the provider\'s website if needed.</string>

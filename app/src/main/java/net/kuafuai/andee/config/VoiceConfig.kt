@@ -45,8 +45,8 @@ object VoiceConfig {
          */
         internal val OVERRIDE_KEYS = setOf(
             "api_key", "asr_endpoint", "tts_endpoint",
-            // Blank goes back to the key the build carries.
-            "codeflying_key",
+            // Separate user-entered credentials for chat and MarketTools.
+            "codeflying_key", "market_api_key", "xkiro_api_key", "xkiro_model",
             // The Google rows all have a real value to fall back to — the
             // build's, or the constant — so an empty box means "use that",
             // which is the only way back to a baked-in key.
@@ -182,6 +182,10 @@ object VoiceConfig {
         const val BRAIN_HUB = net.kuafuai.andee.config.BrainConfig.BRAIN_HUB
         const val BRAIN_LOCAL = net.kuafuai.andee.config.BrainConfig.BRAIN_LOCAL
         const val BRAIN_CODEFLYING = net.kuafuai.andee.config.BrainConfig.BRAIN_CODEFLYING
+        const val BRAIN_XKIRO = net.kuafuai.andee.config.BrainConfig.BRAIN_XKIRO
+
+        /** Fixed xKiro API origin; no user-editable endpoint setting. */
+        const val XKIRO_BASE_URL = "https://api.xkiro.com/v1"
 
         const val DEFAULT_LLM_BASE_URL = "https://api.deepseek.com"
         const val DEFAULT_LLM_MODEL = "deepseek-flash"
@@ -234,16 +238,24 @@ object VoiceConfig {
          * asset at package time. Dev builds fall back to
          * [BuildConfig.CODEFLYING_KEY] from local.properties.
          */
-        fun codeFlyingKey(context: Context): String =
-            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                .getString("codeflying_key", "").orEmpty().trim()
-                .ifEmpty { codeFlyingBuiltInKey(context) }
+        /**
+         * Separate credential for CodeFlying-backed MarketTools. Existing
+         * user-entered `codeflying_key` preferences are migrated once; this
+         * method never reads a credential from an asset or BuildConfig.
+         */
+        fun marketApiKey(context: Context): String {
+            val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val saved = p.getString("market_api_key", null)
+            if (saved != null) return saved.trim()
+            val legacy = p.getString("codeflying_key", "").orEmpty().trim()
+            if (legacy.isNotEmpty()) {
+                p.edit().putString("market_api_key", legacy).remove("codeflying_key").apply()
+            }
+            return legacy
+        }
 
-        /** The key that came with the APK, ignoring anything typed. */
-        fun codeFlyingBuiltInKey(context: Context): String =
-            runCatching {
-                context.assets.open("andee_key.txt").bufferedReader().use { it.readText().trim() }
-            }.getOrDefault("").ifEmpty { BuildConfig.CODEFLYING_KEY }
+        /** Legacy callers now resolve only the independent MarketTools key. */
+        fun codeFlyingKey(context: Context): String = marketApiKey(context)
 
         /** Origin for the market tools; see [net.kuafuai.andee.config.CodeFlyingEndpoint.marketBaseUrl]. */
         fun codeFlyingMarketBaseUrl(context: Context): String =
@@ -366,8 +378,8 @@ object VoiceConfig {
             return when (saved) {
                 BRAIN_HUB -> BRAIN_HUB
                 BRAIN_LOCAL -> BRAIN_LOCAL
-                BRAIN_CODEFLYING -> BRAIN_CODEFLYING
-                "" -> BRAIN_CODEFLYING
+                // Saved CodeFlying installs migrate to xKiro for chat.
+                BRAIN_CODEFLYING, BRAIN_XKIRO, "" -> BRAIN_XKIRO
                 else -> BRAIN_LOCAL
             }
         }
@@ -375,10 +387,22 @@ object VoiceConfig {
         fun brainConfig(context: Context): BrainConfig {
             val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             val mode = brainMode(context)
-            // CodeFlying derives everything from the build — the user does not
-            // see or edit the endpoints. llm_model / thinking / effort are
-            // deliberately *still* read from prefs so the same picker in
-            // [SettingsUi] applies to both local and CodeFlying.
+            // xKiro handles chat only. The endpoint is fixed internally and
+            // the user enters a separate API key and full vendor/model ID.
+            if (mode == BRAIN_XKIRO) {
+                return BrainConfig(
+                    mode = BRAIN_XKIRO,
+                    apiKey = p.getString("xkiro_api_key", "").orEmpty().trim(),
+                    baseUrl = XKIRO_BASE_URL,
+                    model = p.getString("xkiro_model", "").orEmpty().trim(),
+                    thinking = p.getString("llm_thinking", defaultThinking())
+                        ?.trim()?.lowercase() != "disabled",
+                    reasoningEffort = p.getString("llm_reasoning_effort", DEFAULT_REASONING_EFFORT)
+                        .orEmpty().trim().ifEmpty { DEFAULT_REASONING_EFFORT },
+                )
+            }
+            // Legacy direct callers retain the old configuration shape, but
+            // their credential is still resolved only from MarketTools prefs.
             if (mode == BRAIN_CODEFLYING) {
                 return BrainConfig(
                     mode = BRAIN_CODEFLYING,
@@ -637,10 +661,6 @@ object VoiceConfig {
                 // override once saved could never be taken out.
                 // The card shows the key in effect, so saving it back unchanged must not
                 // pin the build's key as a user override: store only a different one.
-                if (k == "codeflying_key" && v.trim() == codeFlyingBuiltInKey(context)) {
-                    p.remove(k)
-                    continue
-                }
                 if (k in OVERRIDE_KEYS) {
                     if (v.isBlank()) p.remove(k) else p.putString(k, v.trim())
                     continue
@@ -669,7 +689,9 @@ object VoiceConfig {
                 // overridable from local.properties now, so the settings card
                 // must show saved-or-empty rather than saved-or-default.
                 "api_key" to p.getString("api_key", "").orEmpty(),
-                "codeflying_key" to codeFlyingKey(context),
+                "market_api_key" to marketApiKey(context),
+                "xkiro_api_key" to p.getString("xkiro_api_key", "").orEmpty(),
+                "xkiro_model" to p.getString("xkiro_model", "").orEmpty(),
                 "asr_endpoint" to p.getString("asr_endpoint", "").orEmpty(),
                 "asr_resource_id" to p.getString("asr_resource_id", DEFAULT_ASR_RESOURCE)!!,
                 "uid" to p.getString("uid", "").orEmpty(),
@@ -696,7 +718,7 @@ object VoiceConfig {
                 // What the card selects: nothing saved is CodeFlying (the default tab for a
                 // new install), whether or not this build can run it — the tab then says so.
                 // Not bc.mode, which has CodeFlying already resolved away to local.
-                "brain" to p.getString("brain", "").orEmpty().trim().lowercase().ifEmpty { BRAIN_CODEFLYING },
+                "brain" to brainMode(context),
                 "show_hub" to if (showHub(context)) "on" else "off",
                 // llm_api_key / llm_base_url / llm_model are the 本机 tab's rows —
                 // the user's own credentials and the endpoint they point at.
@@ -989,7 +1011,7 @@ object VoiceConfig {
             "theme",
             "uid",
             "api_key",
-            "codeflying_key",
+            "codeflying_key", "market_api_key", "xkiro_api_key", "xkiro_model",
             "asr_endpoint", "asr_resource_id",
             "tts_endpoint", "tts_resource_id", "tts_sample_rate",
             "voice_provider", "speak_provider",

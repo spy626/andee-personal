@@ -22,7 +22,7 @@ data class BrainConfig(
      * — both are "the brain is here", only the backend differs). Only
      * [BRAIN_HUB] is "run elsewhere, listen on a socket".
      */
-    val isLocal: Boolean get() = mode == BRAIN_LOCAL || mode == BRAIN_CODEFLYING
+    val isLocal: Boolean get() = mode == BRAIN_LOCAL || mode == BRAIN_CODEFLYING || mode == BRAIN_XKIRO
 
     /**
      * Same backend, possibly asked differently. [mode], [apiKey] and
@@ -39,5 +39,6 @@ data class BrainConfig(
         const val BRAIN_HUB = "hub"
         const val BRAIN_LOCAL = "local"
         const val BRAIN_CODEFLYING = "codeflying"
+        const val BRAIN_XKIRO = "xkiro"
     }
 }

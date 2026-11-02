@@ -30,6 +30,13 @@ class BrainConfigTest {
     }
 
     @Test
+    fun `xKiro uses the on-device agent host`() {
+        val xkiro = base.copy(mode = VoiceConfig.BRAIN_XKIRO)
+        assertTrue(xkiro.isLocal)
+        assertFalse(base.sameBackend(xkiro))
+    }
+
+    @Test
     fun `who answers does`() {
         assertFalse(base.sameBackend(base.copy(apiKey = "sk-two")))
         assertFalse(base.sameBackend(base.copy(baseUrl = "https://other.example.com/v1")))

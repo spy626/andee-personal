@@ -179,8 +179,10 @@ data class FoldedTopic(val id: Long, val title: String, val summary: String)
  */
 enum class BrainText {
     NO_KEY,
-    /** The CodeFlying backend is selected but no key is set: names where to get one. */
+    /** The legacy CodeFlying backend is selected but no key is set. */
     NO_KEY_CODEFLYING,
+    /** xKiro chat is selected but no xKiro key is set. */
+    NO_KEY_XKIRO,
     NO_RESULT,
     REPEAT_STOP,
     MAX_STEPS,

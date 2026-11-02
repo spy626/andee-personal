@@ -41,8 +41,9 @@ class LlmHttpException(val code: Int, val body: String) :
 }
 
 /**
- * One blocking call to an OpenAI-compatible `/chat/completions`, aimed at
- * DeepSeek.
+ * One blocking call to an OpenAI-compatible `/chat/completions`. Existing
+ * providers retain their request dialect; xKiro uses its documented
+ * `reasoning_effort` field without the provider-specific `thinking` object.
  *
  * Deliberately thin and deliberately **not** streaming. Streaming would let TTS
  * start talking a second or two earlier, but it costs an SSE parser plus
@@ -67,6 +68,7 @@ class LlmClient(
     model: String,
     thinking: Boolean,
     reasoningEffort: String,
+    private val xKiroMode: Boolean = false,
 ) {
 
     // Request parameters, read once per [complete]. Volatile because [retune]
@@ -102,7 +104,8 @@ class LlmClient(
         .followRedirects(false)
         .followSslRedirects(false)
         .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(180, TimeUnit.SECONDS)
+        // xKiro caps non-streaming requests at 95 seconds; keep headroom.
+        .readTimeout(if (xKiroMode) 90 else 180, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
@@ -154,16 +157,29 @@ class LlmClient(
      * @param noThinking ask without reasoning whatever the user's setting is.
      */
     fun complete(messages: List<JSONObject>, tools: JSONArray, noThinking: Boolean = false): Reply {
+        val requestModel = model
+        if (xKiroMode) {
+            val vendorSeparator = requestModel.indexOf('/')
+            if (vendorSeparator <= 0 || vendorSeparator == requestModel.lastIndex ||
+                requestModel.any { it.isWhitespace() }
+            ) {
+                throw IllegalStateException("xKiro model ID must use the full vendor/model format.")
+            }
+        }
         val msgArr = JSONArray()
         for (m in messages) msgArr.put(m)
         val body = JSONObject()
-            .put("model", model)
+            .put("model", requestModel)
             .put("messages", msgArr)
             .put("stream", false)
         if (tools.length() > 0) {
             body.put("tools", tools).put("tool_choice", "auto")
         }
-        if (thinking && !noThinking) {
+        if (xKiroMode) {
+            // xKiro documents reasoning_effort, not CodeFlying/DeepSeek's
+            // `thinking` object. `none` explicitly disables reasoning.
+            body.put("reasoning_effort", if (thinking && !noThinking) reasoningEffort else "none")
+        } else if (thinking && !noThinking) {
             body.put("thinking", JSONObject().put("type", "enabled"))
             body.put("reasoning_effort", reasoningEffort)
         } else {

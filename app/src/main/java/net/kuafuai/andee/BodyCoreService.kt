@@ -2911,19 +2911,23 @@ class BodyCoreService : Service() {
             reportNoBrain(
                 AppLocale.str(
                     this,
-                    if (bc.mode == net.kuafuai.andee.config.VoiceConfig.BRAIN_CODEFLYING) R.string.svc_no_brain_codeflying
-                    else R.string.svc_no_brain_local,
+                    when (bc.mode) {
+                        net.kuafuai.andee.config.VoiceConfig.BRAIN_XKIRO -> R.string.svc_no_brain_xkiro
+                        net.kuafuai.andee.config.VoiceConfig.BRAIN_CODEFLYING -> R.string.svc_no_brain_codeflying
+                        else -> R.string.svc_no_brain_local
+                    },
                 ),
                 announce,
             )
         }
-        // CodeFlying is the only backend with a market behind it. Everywhere
-        // else this object is inert — empty tool list, `hasMethod` always false
-        // — so a local or hub brain's tool surface is exactly what it was.
+        // MarketTools is an independent CodeFlying-backed service. Never pass
+        // the xKiro chat key here; it has its own saved credential.
+        val marketBaseUrl = net.kuafuai.andee.config.VoiceConfig.codeFlyingMarketBaseUrl(this)
+        val marketApiKey = net.kuafuai.andee.config.VoiceConfig.marketApiKey(this)
         val market = net.kuafuai.andee.market.MarketTools(
-            baseUrl = net.kuafuai.andee.config.VoiceConfig.codeFlyingMarketBaseUrl(this),
-            apiKey = bc.apiKey,
-            enabled = bc.mode == net.kuafuai.andee.config.VoiceConfig.BRAIN_CODEFLYING,
+            baseUrl = marketBaseUrl,
+            apiKey = marketApiKey,
+            enabled = bc.isLocal && marketBaseUrl.isNotBlank() && marketApiKey.isNotBlank(),
         )
         marketTools = market
         localBrain = net.kuafuai.andee.brain.LocalBrain(

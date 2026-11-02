@@ -583,7 +583,7 @@ class SettingsUi(
      * picker folds away the half that is not in play.
      */
     /**
-     * The backend section. Three tabs — 本机 / CodeFlying / 云端 — only one is
+     * The backend section. Three tabs — xKiro / 本机 / 云端 — only one is
      * ever in play, and the picker folds away the two that are not.
      *
      * Visibility rules:
@@ -609,20 +609,10 @@ class SettingsUi(
             lctx.getString(R.string.settings_brain_panel_note),
         )
 
-        // Tab picker. 本机 and CodeFlying are always visible — CodeFlying stays
-        // in the row even when the build didn't configure it, so the user is
-        // told what it is and how to turn it on. 云端 is still gated on the
-        // user's own show_hub toggle: it is the only tab that is pure extra
-        // configuration surface, so nobody who hasn't asked for it needs to
-        // see it. If the user picks CodeFlying without a configured build,
-        // [VoiceConfig.brainMode] silently falls back to local at runtime —
-        // the saved value sticks, so the picker rebuilds correctly, and
-        // installing a configured build later flips the behaviour on without
-        // the user having to re-pick.
-        // CodeFlying leads: it is the default tab on a fresh install, and the
-        // leftmost cell is the fallback (see [segmented]).
+        // xKiro is the default chat backend. The Cloud tab remains gated on
+        // the user's explicit show_hub choice.
         val options = buildList {
-            add(VoiceConfig.BRAIN_CODEFLYING to lctx.getString(R.string.settings_brain_codeflying))
+            add(VoiceConfig.BRAIN_XKIRO to lctx.getString(R.string.settings_brain_xkiro))
             add(VoiceConfig.BRAIN_LOCAL to lctx.getString(R.string.settings_brain_local))
             if (VoiceConfig.showHub(context)) {
                 add(VoiceConfig.BRAIN_HUB to lctx.getString(R.string.settings_brain_cloud))
@@ -651,29 +641,42 @@ class SettingsUi(
         )
         note(hubBlock, lctx.getString(R.string.settings_brain_cloud_note))
 
-        // ---- CodeFlying tab ----
-        // No "connected or not": the tab is the default, and the one thing it has
-        // to say is how to get a key while there is none. With a key it says what
-        // the backend is.
-        val cfBlock = block(panel)
-        val cfKeyed = VoiceConfig.codeFlyingKey(context).isNotEmpty()
-        // Same words and same link whether or not a key is set: the tab does not
-        // describe the state, the key box below does.
-        note(cfBlock, lctx.getString(R.string.settings_brain_codeflying_note))
-        note(cfBlock, lctx.getString(R.string.settings_codeflying_get_key))
-        linkNote(cfBlock, lctx.getString(R.string.settings_codeflying_open_site)) {
-            onOpenLink(lctx.getString(R.string.codeflying_url))
-        }
-        // Shows the key in effect (typed, else the build's); editing it overrides.
-        // The server address is the build's and has no row. The key row is always
-        // here: it is where a person who just got a key from the link above puts it.
+        // ---- xKiro chat tab ----
+        val xkiroBlock = block(panel)
+        note(xkiroBlock, lctx.getString(R.string.settings_brain_xkiro_note))
         field(
-            cfBlock,
-            "codeflying_key",
-            lctx.getString(R.string.settings_codeflying_key),
-            hint = "kft_…",
+            xkiroBlock,
+            "xkiro_api_key",
+            lctx.getString(R.string.settings_xkiro_api_key),
+            hint = lctx.getString(R.string.settings_xkiro_api_key_hint),
             secret = true,
-            copyValue = { VoiceConfig.codeFlyingKey(context) },
+        )
+        field(
+            xkiroBlock,
+            "xkiro_model",
+            lctx.getString(R.string.settings_xkiro_model),
+            hint = lctx.getString(R.string.settings_xkiro_model_hint),
+        )
+        linkNote(xkiroBlock, lctx.getString(R.string.settings_xkiro_models_link)) {
+            onOpenLink(lctx.getString(R.string.xkiro_models_url))
+        }
+        rowLabel(xkiroBlock, lctx.getString(R.string.settings_llm_thinking))
+        var applyXkiroThinking: ((String, Boolean) -> Unit)? = null
+        val xkiroThinking = segmented(
+            xkiroBlock,
+            "llm_thinking",
+            listOf("enabled" to lctx.getString(R.string.common_on), "disabled" to lctx.getString(R.string.common_off)),
+        ) { applyXkiroThinking?.invoke(it, true) }
+        val xkiroEffortBlock = block(xkiroBlock)
+        rowLabel(xkiroEffortBlock, lctx.getString(R.string.settings_llm_effort))
+        segmented(
+            xkiroEffortBlock,
+            "llm_reasoning_effort",
+            listOf(
+                "high" to lctx.getString(R.string.common_high),
+                "medium" to lctx.getString(R.string.common_medium),
+                "low" to lctx.getString(R.string.common_low),
+            ),
         )
 
         // ---- 本机 tab: LLM + 火山 voice rows ----
@@ -695,8 +698,8 @@ class SettingsUi(
         // moves the tab under their finger rather than sending them up to
         // find which cell that was — and it only moves the pick; 保存 still
         // commits it, like every other row.
-        linkNote(localBlock, lctx.getString(R.string.settings_no_key_use_codeflying)) {
-            pickBrain(VoiceConfig.BRAIN_CODEFLYING)
+        linkNote(localBlock, lctx.getString(R.string.settings_no_key_use_xkiro)) {
+            pickBrain(VoiceConfig.BRAIN_XKIRO)
         }
         field(
             localBlock,
@@ -731,6 +734,20 @@ class SettingsUi(
             ),
         )
         note(localBlock, lctx.getString(R.string.settings_brain_local_note))
+
+        // ---- Independent MarketTools service ----
+        val marketBlock = block(panel)
+        note(marketBlock, lctx.getString(R.string.settings_market_tools_note))
+        field(
+            marketBlock,
+            "market_api_key",
+            lctx.getString(R.string.settings_market_api_key),
+            hint = "kft_…",
+            secret = true,
+        )
+        linkNote(marketBlock, lctx.getString(R.string.settings_market_tools_get_key)) {
+            onOpenLink(lctx.getString(R.string.codeflying_url))
+        }
 
         // ---- Which service hears and speaks ----
         //
@@ -792,9 +809,6 @@ class SettingsUi(
         )
         // Same line, same reason, under the voice key: this is the other half
         // of what CodeFlying would hand over for free.
-        linkNote(huoshanBlock, lctx.getString(R.string.settings_no_key_use_codeflying)) {
-            pickBrain(VoiceConfig.BRAIN_CODEFLYING)
-        }
         field(huoshanBlock, "asr_endpoint", lctx.getString(R.string.settings_voice_asr_endpoint), hint = VoiceConfig.DEFAULT_ASR_ENDPOINT)
         field(huoshanBlock, "asr_resource_id", lctx.getString(R.string.settings_voice_asr_resource_id), hint = VoiceConfig.DEFAULT_ASR_RESOURCE)
         field(huoshanBlock, "tts_endpoint", lctx.getString(R.string.settings_voice_tts_endpoint), hint = VoiceConfig.DEFAULT_TTS_ENDPOINT)
@@ -834,9 +848,6 @@ class SettingsUi(
             },
             secret = true,
         )
-        linkNote(googleBlock, lctx.getString(R.string.settings_no_key_use_codeflying)) {
-            pickBrain(VoiceConfig.BRAIN_CODEFLYING)
-        }
         field(
             googleBlock,
             "google_project",
@@ -889,35 +900,20 @@ class SettingsUi(
         }
         applyProvider(provider, false)
 
-        // **The voice block is not drawn at all under the hosted backend**, and
-        // not merely disabled. There, [VoiceConfig.voiceProvider] pins 火山 and
-        // [VoiceConfig.load] takes every endpoint and credential from the build
-        // — so every control in this block is read by nothing. A row the user
-        // can edit that changes no behaviour is the small lie this card exists
-        // to avoid, and the honest surface for "what is actually in use" is the
-        // self-check page, which grades the real provider rather than a saved
-        // string.
-        //
-        // **Its flip belongs to the mode picker, not to this build pass.** It
-        // used to be a lone `setVisible` evaluated once here, against the
-        // *saved* mode, so picking 本机 out of CodeFlying left the block hidden
-        // until 保存 rebuilt the card — a control that only appears if you
-        // press the button standing next to it. Same condition; the difference
-        // is that it is asked of the value the user just picked, through
-        // [VoiceConfig.resolveBrainMode], so a build that does not enable
-        // CodeFlying still shows the block its runtime is actually reading.
-        //
-        // One block visible at a time. Simultaneous flips so the card's total
-        // height barely moves — see the old comment, still true.
+        // Voice is independent of chat. xKiro does not provide ASR or TTS,
+        // so the existing on-device voice provider remains selectable here.
         applyMode = { m, animate ->
             Glass.setVisible(hubBlock, m == VoiceConfig.BRAIN_HUB, animate)
-            Glass.setVisible(cfBlock, m == VoiceConfig.BRAIN_CODEFLYING, animate)
+            Glass.setVisible(xkiroBlock, m == VoiceConfig.BRAIN_XKIRO, animate)
             Glass.setVisible(localBlock, m == VoiceConfig.BRAIN_LOCAL, animate)
-            // Keyed on the tab the user is looking at, not on what the build
-            // can resolve it to: CodeFlying carries its own voice, and a voice
-            // key row under that tab is a row nothing reads.
-            Glass.setVisible(voiceBlock, m != VoiceConfig.BRAIN_CODEFLYING, animate)
+            // MarketTools is routed through the on-device LocalBrain only.
+            Glass.setVisible(marketBlock, m != VoiceConfig.BRAIN_HUB, animate)
+            Glass.setVisible(voiceBlock, true, animate)
         }
+        applyXkiroThinking = { th, animate ->
+            Glass.setVisible(xkiroEffortBlock, th != "disabled", animate)
+        }
+        applyXkiroThinking(xkiroThinking, false)
         applyMode(mode, false)
         applyThinking = { th, animate ->
             Glass.setVisible(effortBlock, th != "disabled", animate)
